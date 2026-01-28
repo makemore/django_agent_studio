@@ -1074,6 +1074,34 @@ class AgentFullSchemaView(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    def _get_memory_config(self, version):
+        """Extract memory configuration from version's extra_config."""
+        if not version:
+            return self._default_memory_config()
+
+        extra = version.extra_config or {}
+        return {
+            "enabled": extra.get("memory_enabled", True),
+            "default_scope": extra.get("memory_default_scope", "user"),
+            "allowed_scopes": extra.get("memory_allowed_scopes", ["conversation", "user", "system"]),
+            "auto_recall": extra.get("memory_auto_recall", True),
+            "max_memories_in_prompt": extra.get("memory_max_in_prompt", 50),
+            "include_system_memories": extra.get("memory_include_system", True),
+            "retention_days": extra.get("memory_retention_days", None),
+        }
+
+    def _default_memory_config(self):
+        """Return default memory configuration."""
+        return {
+            "enabled": True,
+            "default_scope": "user",
+            "allowed_scopes": ["conversation", "user", "system"],
+            "auto_recall": True,
+            "max_memories_in_prompt": 50,
+            "include_system_memories": True,
+            "retention_days": None,
+        }
+
     def get(self, request, pk):
         """Get the complete agent schema."""
         agent = get_agent_for_user(request.user, pk)
@@ -1124,6 +1152,20 @@ class AgentFullSchemaView(APIView):
                 "chunk_overlap": 50,
                 "embedding_model": "text-embedding-3-small",
             },
+
+            # File upload/processing configuration
+            "file_config": agent.file_config or {
+                "enabled": False,
+                "max_file_size_mb": 100,
+                "allowed_types": ["image/*", "application/pdf", "text/*"],
+                "ocr_provider": None,
+                "vision_provider": None,
+                "enable_thumbnails": True,
+                "storage_path": None,
+            },
+
+            # Memory configuration (from extra_config)
+            "memory_config": self._get_memory_config(active_version),
 
             # Static tools (AgentTool)
             "tools": [
@@ -1241,6 +1283,8 @@ class AgentFullSchemaView(APIView):
             agent.is_active = data['is_active']
         if 'rag_config' in data:
             agent.rag_config = data['rag_config']
+        if 'file_config' in data:
+            agent.file_config = data['file_config']
 
         agent.save()
 
@@ -1260,6 +1304,30 @@ class AgentFullSchemaView(APIView):
                     active_version.extra_config = version_data['extra_config']
                 if 'notes' in version_data:
                     active_version.notes = version_data['notes']
+                active_version.save()
+
+        # Update memory configuration
+        if 'memory_config' in data:
+            active_version = agent.versions.filter(is_active=True).first()
+            if active_version:
+                mem_config = data['memory_config']
+                if active_version.extra_config is None:
+                    active_version.extra_config = {}
+                # Map memory_config fields to extra_config keys
+                if 'enabled' in mem_config:
+                    active_version.extra_config['memory_enabled'] = mem_config['enabled']
+                if 'default_scope' in mem_config:
+                    active_version.extra_config['memory_default_scope'] = mem_config['default_scope']
+                if 'allowed_scopes' in mem_config:
+                    active_version.extra_config['memory_allowed_scopes'] = mem_config['allowed_scopes']
+                if 'auto_recall' in mem_config:
+                    active_version.extra_config['memory_auto_recall'] = mem_config['auto_recall']
+                if 'max_memories_in_prompt' in mem_config:
+                    active_version.extra_config['memory_max_in_prompt'] = mem_config['max_memories_in_prompt']
+                if 'include_system_memories' in mem_config:
+                    active_version.extra_config['memory_include_system'] = mem_config['include_system_memories']
+                if 'retention_days' in mem_config:
+                    active_version.extra_config['memory_retention_days'] = mem_config['retention_days']
                 active_version.save()
 
         # Update tools
@@ -1925,3 +1993,68 @@ class SpecDocumentRenderView(APIView):
                 'root_count': len(parts),
                 'roots': [{'id': str(r.id), 'title': r.title} for r in roots],
             })
+
+
+class AgentSpecDocumentView(APIView):
+    """Get or create the spec document linked to an agent."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, agent_id):
+        """Get the spec document linked to this agent, or return empty if none exists."""
+        from django_agent_runtime.models import SpecDocument
+
+        agent = get_agent_for_user(request.user, agent_id)
+
+        spec_doc = SpecDocument.objects.filter(linked_agent=agent).first()
+
+        if spec_doc:
+            return Response({
+                'id': str(spec_doc.id),
+                'title': spec_doc.title,
+                'content': spec_doc.content,
+                'current_version': spec_doc.current_version,
+                'has_spec': bool(spec_doc.content),
+                'created_at': spec_doc.created_at.isoformat(),
+                'updated_at': spec_doc.updated_at.isoformat(),
+            })
+        else:
+            return Response({
+                'id': None,
+                'title': None,
+                'content': '',
+                'current_version': 0,
+                'has_spec': False,
+            })
+
+    def put(self, request, agent_id):
+        """Update or create the spec document for this agent."""
+        from django_agent_runtime.models import SpecDocument
+
+        agent = get_agent_for_user(request.user, agent_id)
+        content = request.data.get('content', '')
+
+        spec_doc = SpecDocument.objects.filter(linked_agent=agent).first()
+
+        if spec_doc:
+            # Update existing
+            spec_doc.content = content
+            spec_doc.save()  # Auto-creates version
+            created = False
+        else:
+            # Create new
+            spec_doc = SpecDocument.objects.create(
+                title=f"{agent.name} Specification",
+                content=content,
+                linked_agent=agent,
+                owner=request.user if request.user.is_authenticated else None,
+            )
+            created = True
+
+        return Response({
+            'id': str(spec_doc.id),
+            'title': spec_doc.title,
+            'content': spec_doc.content,
+            'current_version': spec_doc.current_version,
+            'created': created,
+            'message': f"Spec {'created' if created else 'updated'} for {agent.name}",
+        })

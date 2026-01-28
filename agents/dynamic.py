@@ -25,18 +25,19 @@ logger = logging.getLogger(__name__)
 
 
 # =============================================================================
-# Memory Tool Definition
+# Memory Tool Definitions
 # =============================================================================
 
+# Conversation-scoped memory (ephemeral, lost when conversation ends)
 MEMORY_TOOL_SCHEMA = {
     "type": "function",
     "function": {
         "name": "remember",
         "description": (
-            "Store information to remember for this conversation. Use this to remember "
-            "important facts about the user, their preferences, project details, or anything "
-            "that would be useful to recall in future messages within this conversation. "
-            "Examples: user's name, their goals, preferences, important context."
+            "Store information to remember. Use this to remember important facts about "
+            "the user, their preferences, project details, or anything useful to recall. "
+            "Use semantic dot-notation keys like 'user.name', 'user.preferences.theme', "
+            "'project.goal'. By default, memories persist across conversations for this user."
         ),
         "parameters": {
             "type": "object",
@@ -44,16 +45,86 @@ MEMORY_TOOL_SCHEMA = {
                 "key": {
                     "type": "string",
                     "description": (
-                        "A short, descriptive key for what you're remembering "
-                        "(e.g., 'user_name', 'project_goal', 'preferred_language')"
+                        "A semantic key using dot-notation for what you're remembering "
+                        "(e.g., 'user.name', 'user.preferences.language', 'project.goal')"
                     ),
                 },
                 "value": {
                     "type": "string",
                     "description": "The information to remember",
                 },
+                "scope": {
+                    "type": "string",
+                    "enum": ["conversation", "user", "system"],
+                    "description": (
+                        "Memory scope: 'conversation' (this chat only), "
+                        "'user' (persists across chats, default), "
+                        "'system' (shared with other agents)"
+                    ),
+                },
             },
             "required": ["key", "value"],
+        },
+    },
+}
+
+# Tool to recall memories
+RECALL_TOOL_SCHEMA = {
+    "type": "function",
+    "function": {
+        "name": "recall",
+        "description": (
+            "Recall stored memories. Use this to retrieve information you've previously "
+            "remembered about the user or project. You can recall a specific key or list "
+            "all memories matching a prefix."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "key": {
+                    "type": "string",
+                    "description": (
+                        "The specific key to recall (e.g., 'user.name') or a prefix "
+                        "to list all matching memories (e.g., 'user.preferences')"
+                    ),
+                },
+                "scope": {
+                    "type": "string",
+                    "enum": ["conversation", "user", "system", "all"],
+                    "description": (
+                        "Which scope to search: 'conversation', 'user', 'system', "
+                        "or 'all' (default) to search all scopes"
+                    ),
+                },
+            },
+            "required": ["key"],
+        },
+    },
+}
+
+# Tool to forget memories
+FORGET_TOOL_SCHEMA = {
+    "type": "function",
+    "function": {
+        "name": "forget",
+        "description": (
+            "Forget/delete a stored memory. Use this when the user asks you to forget "
+            "something or when information is no longer relevant."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "key": {
+                    "type": "string",
+                    "description": "The key of the memory to forget (e.g., 'user.name')",
+                },
+                "scope": {
+                    "type": "string",
+                    "enum": ["conversation", "user", "system"],
+                    "description": "The scope of the memory to forget",
+                },
+            },
+            "required": ["key"],
         },
     },
 }
@@ -78,19 +149,26 @@ class DynamicAgentRuntime(AgentRuntime):
     
     @property
     def config(self) -> dict:
-        """Get the effective configuration (cached)."""
+        """Get the effective configuration (cached). Use get_config_async() in async contexts."""
         if self._config is None:
             self._config = self._definition.get_effective_config()
         return self._config
-    
+
+    async def get_config_async(self) -> dict:
+        """Get the effective configuration in an async-safe way."""
+        from asgiref.sync import sync_to_async
+        if self._config is None:
+            self._config = await sync_to_async(self._definition.get_effective_config)()
+        return self._config
+
     def refresh_config(self):
         """Refresh the configuration from the database."""
         self._definition.refresh_from_db()
         self._config = None
-    
+
     async def run(self, ctx: RunContext) -> RunResult:
         """Execute the agent with the dynamic configuration and agentic loop."""
-        config = self.config
+        config = await self.get_config_async()
 
         # Check if memory is enabled (default: True)
         extra_config = config.get("extra", {})
@@ -99,8 +177,23 @@ class DynamicAgentRuntime(AgentRuntime):
         # Build the messages list
         messages = []
 
-        # Add system prompt
-        system_prompt = config.get("system_prompt", "")
+        # Start with system-level shared knowledge (if agent is part of a system)
+        system_context = await self._get_system_context()
+        system_prefix = ""
+        if system_context:
+            system_prefix = system_context.get_system_prompt_prefix()
+            logger.debug(f"Injecting system context from '{system_context.system_name}'")
+
+        # Add agent's system prompt
+        agent_prompt = config.get("system_prompt", "")
+
+        # Combine system prefix with agent prompt
+        if system_prefix and agent_prompt:
+            system_prompt = f"{system_prefix}\n\n---\n\n{agent_prompt}"
+        elif system_prefix:
+            system_prompt = system_prefix
+        else:
+            system_prompt = agent_prompt
 
         # Add knowledge that should always be included
         knowledge_context = self._build_knowledge_context(config)
@@ -117,7 +210,7 @@ class DynamicAgentRuntime(AgentRuntime):
         if memory_enabled:
             memory_store = await self._get_memory_store(ctx)
             if memory_store:
-                memory_context = await self._recall_memories(memory_store)
+                memory_context = await self._recall_memories(memory_store, ctx)
                 if memory_context:
                     system_prompt = f"{system_prompt}\n\n{memory_context}"
 
@@ -127,10 +220,12 @@ class DynamicAgentRuntime(AgentRuntime):
         # Add conversation history
         messages.extend(ctx.input_messages)
 
-        # Build tool schemas - include memory tool only if memory is enabled
+        # Build tool schemas - include memory tools if memory is enabled
         tools = self._build_tool_schemas(config)
         if memory_enabled:
             tools.append(MEMORY_TOOL_SCHEMA)
+            tools.append(RECALL_TOOL_SCHEMA)
+            tools.append(FORGET_TOOL_SCHEMA)
 
         tool_map = self._build_tool_map(config)  # Maps tool name to execution info
 
@@ -146,9 +241,13 @@ class DynamicAgentRuntime(AgentRuntime):
 
         # Create tool executor function for the agentic loop
         async def execute_tool(tool_name: str, tool_args: dict) -> str:
-            # Handle the built-in remember tool
+            # Handle the built-in memory tools
             if tool_name == "remember":
-                return await self._execute_remember_tool(tool_args, memory_store)
+                return await self._execute_remember_tool(tool_args, memory_store, ctx)
+            if tool_name == "recall":
+                return await self._execute_recall_tool(tool_args, memory_store, ctx)
+            if tool_name == "forget":
+                return await self._execute_forget_tool(tool_args, memory_store, ctx)
 
             return await self._execute_tool(
                 tool_name, tool_args, tool_map, tool_executor, ctx
@@ -181,22 +280,50 @@ class DynamicAgentRuntime(AgentRuntime):
             await ctx.emit(EventType.RUN_FAILED, {"error": str(e)})
             raise
 
-    async def _get_memory_store(self, ctx: RunContext) -> Optional["ConversationMemoryStore"]:
+    async def _get_system_context(self):
         """
-        Get the memory store for this conversation, if available.
+        Get the SystemContext if this agent is part of an AgentSystem.
 
-        Returns None if we don't have the required context (user, conversation_id).
+        Returns:
+            SystemContext with shared knowledge, or None if agent is not in a system
         """
-        from django_agent_runtime.persistence.stores import ConversationMemoryStore
+        from asgiref.sync import sync_to_async
+        from django_agent_runtime.models import AgentSystemMember
 
-        # Need both user and conversation_id for memory
+        try:
+            # Check if this agent is a member of any system
+            membership = await sync_to_async(
+                lambda: AgentSystemMember.objects.filter(
+                    agent=self._definition
+                ).select_related('system').first()
+            )()
+
+            if membership and membership.system:
+                # Get the SystemContext from the system
+                system_context = await sync_to_async(
+                    membership.system.get_system_context
+                )()
+                return system_context
+
+        except Exception as e:
+            logger.warning(f"Failed to get system context: {e}")
+
+        return None
+
+    async def _get_memory_store(self, ctx: RunContext) -> Optional["DjangoSharedMemoryStore"]:
+        """
+        Get the shared memory store for this user, if available.
+
+        Returns None if we don't have the required context (authenticated user).
+        Privacy enforcement: Only authenticated users can have persistent memories.
+        """
+        from django_agent_runtime.persistence.stores import DjangoSharedMemoryStore
+
+        # Need authenticated user for memory (privacy enforcement)
         user_id = ctx.metadata.get("user_id")
-        conversation_id = ctx.conversation_id
 
-        if not user_id or not conversation_id:
-            logger.debug(
-                f"Memory not available: user_id={user_id}, conversation_id={conversation_id}"
-            )
+        if not user_id:
+            logger.debug("Memory not available: no authenticated user")
             return None
 
         try:
@@ -207,53 +334,236 @@ class DynamicAgentRuntime(AgentRuntime):
             User = get_user_model()
             user = await sync_to_async(User.objects.get)(id=user_id)
 
-            return ConversationMemoryStore(user=user, conversation_id=conversation_id)
+            return DjangoSharedMemoryStore(user=user)
         except Exception as e:
             logger.warning(f"Failed to create memory store: {e}")
             return None
 
-    async def _recall_memories(self, memory_store: "ConversationMemoryStore") -> str:
+    async def _recall_memories(
+        self,
+        memory_store: "DjangoSharedMemoryStore",
+        ctx: RunContext,
+    ) -> str:
         """
-        Recall all memories for this conversation and format for the prompt.
+        Recall all memories for this user and format for the prompt.
+        Includes user-scoped and system-scoped memories.
         """
         try:
-            memories = await memory_store.recall_all()
-            if memories:
-                logger.info(f"Recalled {len(memories)} memories for conversation")
-                return memory_store.format_for_prompt(memories)
+            # Get user-scoped memories
+            user_memories = await memory_store.list(scope="user", limit=50)
+
+            # Get system-scoped memories (shared across agents)
+            system_memories = await memory_store.list(scope="system", limit=50)
+
+            # Get conversation-scoped memories
+            conversation_memories = []
+            if ctx.conversation_id:
+                conversation_memories = await memory_store.list(
+                    scope="conversation",
+                    conversation_id=ctx.conversation_id,
+                    limit=50,
+                )
+
+            all_memories = user_memories + system_memories + conversation_memories
+
+            if all_memories:
+                logger.info(f"Recalled {len(all_memories)} memories for user")
+                return self._format_memories_for_prompt(all_memories)
         except Exception as e:
             logger.warning(f"Failed to recall memories: {e}")
         return ""
 
+    def _format_memories_for_prompt(self, memories: list) -> str:
+        """Format memories for inclusion in a system prompt."""
+        if not memories:
+            return ""
+
+        lines = ["# Remembered Information", ""]
+
+        # Group by scope
+        by_scope = {"user": [], "system": [], "conversation": []}
+        for mem in memories:
+            scope = mem.scope if hasattr(mem, 'scope') else "user"
+            if scope in by_scope:
+                by_scope[scope].append(mem)
+
+        if by_scope["user"]:
+            lines.append("## About This User")
+            for mem in by_scope["user"]:
+                display_key = mem.key.replace(".", " > ").replace("_", " ").title()
+                lines.append(f"- **{display_key}**: {mem.value}")
+            lines.append("")
+
+        if by_scope["system"]:
+            lines.append("## Shared Knowledge")
+            for mem in by_scope["system"]:
+                display_key = mem.key.replace(".", " > ").replace("_", " ").title()
+                lines.append(f"- **{display_key}**: {mem.value}")
+            lines.append("")
+
+        if by_scope["conversation"]:
+            lines.append("## This Conversation")
+            for mem in by_scope["conversation"]:
+                display_key = mem.key.replace(".", " > ").replace("_", " ").title()
+                lines.append(f"- **{display_key}**: {mem.value}")
+            lines.append("")
+
+        return "\n".join(lines)
+
     async def _execute_remember_tool(
         self,
         args: dict,
-        memory_store: Optional["ConversationMemoryStore"],
+        memory_store: Optional["DjangoSharedMemoryStore"],
+        ctx: RunContext,
     ) -> str:
         """Execute the remember tool to store a memory."""
         if not memory_store:
             return json.dumps({
-                "error": "Memory not available for this conversation",
-                "hint": "Memory requires a logged-in user and conversation context",
+                "error": "Memory not available",
+                "hint": "Memory requires a logged-in user",
             })
 
         key = args.get("key", "").strip()
         value = args.get("value", "").strip()
+        scope = args.get("scope", "user").strip()
 
         if not key:
             return json.dumps({"error": "Missing required parameter: key"})
         if not value:
             return json.dumps({"error": "Missing required parameter: value"})
+        if scope not in ("conversation", "user", "system"):
+            return json.dumps({"error": f"Invalid scope: {scope}"})
 
         try:
-            await memory_store.remember(key, value, source="agent")
-            logger.info(f"Stored memory: {key}")
+            # For conversation scope, need conversation_id
+            conversation_id = ctx.conversation_id if scope == "conversation" else None
+
+            await memory_store.set(
+                key=key,
+                value=value,
+                scope=scope,
+                source=f"agent:{self.key}",
+                conversation_id=conversation_id,
+            )
+            logger.info(f"Stored memory: {key} (scope={scope})")
             return json.dumps({
                 "success": True,
-                "message": f"Remembered: {key}",
+                "message": f"Remembered: {key} (scope: {scope})",
             })
         except Exception as e:
             logger.exception(f"Failed to store memory: {key}")
+            return json.dumps({"error": str(e)})
+
+    async def _execute_recall_tool(
+        self,
+        args: dict,
+        memory_store: Optional["DjangoSharedMemoryStore"],
+        ctx: RunContext,
+    ) -> str:
+        """Execute the recall tool to retrieve memories."""
+        if not memory_store:
+            return json.dumps({
+                "error": "Memory not available",
+                "hint": "Memory requires a logged-in user",
+            })
+
+        key = args.get("key", "").strip()
+        scope = args.get("scope", "all").strip()
+
+        if not key:
+            return json.dumps({"error": "Missing required parameter: key"})
+
+        try:
+            results = []
+
+            # Determine which scopes to search
+            scopes_to_search = []
+            if scope == "all":
+                scopes_to_search = ["user", "system", "conversation"]
+            else:
+                scopes_to_search = [scope]
+
+            for s in scopes_to_search:
+                conversation_id = ctx.conversation_id if s == "conversation" else None
+
+                # Try exact match first
+                item = await memory_store.get(key, scope=s, conversation_id=conversation_id)
+                if item:
+                    results.append({
+                        "key": item.key,
+                        "value": item.value,
+                        "scope": item.scope,
+                        "source": item.source,
+                    })
+                else:
+                    # Try prefix match
+                    items = await memory_store.list(
+                        prefix=key,
+                        scope=s,
+                        conversation_id=conversation_id,
+                        limit=20,
+                    )
+                    for item in items:
+                        results.append({
+                            "key": item.key,
+                            "value": item.value,
+                            "scope": item.scope,
+                            "source": item.source,
+                        })
+
+            if results:
+                return json.dumps({"memories": results})
+            else:
+                return json.dumps({"memories": [], "message": f"No memories found for key: {key}"})
+
+        except Exception as e:
+            logger.exception(f"Failed to recall memory: {key}")
+            return json.dumps({"error": str(e)})
+
+    async def _execute_forget_tool(
+        self,
+        args: dict,
+        memory_store: Optional["DjangoSharedMemoryStore"],
+        ctx: RunContext,
+    ) -> str:
+        """Execute the forget tool to delete a memory."""
+        if not memory_store:
+            return json.dumps({
+                "error": "Memory not available",
+                "hint": "Memory requires a logged-in user",
+            })
+
+        key = args.get("key", "").strip()
+        scope = args.get("scope", "user").strip()
+
+        if not key:
+            return json.dumps({"error": "Missing required parameter: key"})
+        if scope not in ("conversation", "user", "system"):
+            return json.dumps({"error": f"Invalid scope: {scope}"})
+
+        try:
+            conversation_id = ctx.conversation_id if scope == "conversation" else None
+
+            deleted = await memory_store.delete(
+                key=key,
+                scope=scope,
+                conversation_id=conversation_id,
+            )
+
+            if deleted:
+                logger.info(f"Deleted memory: {key} (scope={scope})")
+                return json.dumps({
+                    "success": True,
+                    "message": f"Forgot: {key}",
+                })
+            else:
+                return json.dumps({
+                    "success": False,
+                    "message": f"No memory found with key: {key}",
+                })
+
+        except Exception as e:
+            logger.exception(f"Failed to forget memory: {key}")
             return json.dumps({"error": str(e)})
     
     def _build_knowledge_context(self, config: dict) -> str:

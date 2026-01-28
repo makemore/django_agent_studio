@@ -293,4 +293,11 @@ urlpatterns = [
         views.SpecDocumentRenderView.as_view(),
         name="spec_document_render",
     ),
+
+    # Agent-specific spec document (get/update the spec linked to an agent)
+    path(
+        "agents/<uuid:agent_id>/spec/",
+        views.AgentSpecDocumentView.as_view(),
+        name="agent_spec_document",
+    ),
 ]

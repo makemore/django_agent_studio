@@ -41,6 +41,7 @@ You have access to tools that allow you to:
 8. **Switch between agents and systems** in the UI
 9. **Configure agent memory** (enable/disable the remember tool)
 10. **Manage agent specifications** (human-readable behavior descriptions)
+11. **Configure file uploads** (allowed types, size limits, OCR/vision providers)
 
 ## IMPORTANT: Tool Usage
 
@@ -97,15 +98,70 @@ You can control the builder UI to switch between different agents and systems:
 When the user asks to work on a different agent or system, use these tools to switch context.
 The UI will automatically update to show the selected agent/system.
 
+## System Management
+
+You can create and manage multi-agent systems directly:
+- Use `create_system` to create a new system with an entry agent
+- Use `add_agent_to_system` to add agents to an existing system
+- Use `remove_agent_from_system` to remove agents from a system
+- Use `update_system_config` to modify system settings (name, description, entry agent, shared knowledge)
+- Use `delete_system` to delete a system (agents are NOT deleted)
+
+**Creating a System:**
+```
+create_system({{
+  "name": "Customer Support",
+  "entry_agent_slug": "support-triage",
+  "description": "Handles customer inquiries",
+  "auto_discover": true  // Automatically adds all sub-agents
+}})
+```
+
+**Shared Knowledge:**
+Systems can have shared knowledge that applies to ALL agents in the system. Use `update_system_config` with `shared_knowledge`:
+```
+update_system_config({{
+  "system_slug": "customer-support",
+  "shared_knowledge": [
+    {{
+      "key": "company-info",
+      "title": "Company Information",
+      "content": "We are Acme Corp...",
+      "inject_as": "system",  // Prepend to system prompt
+      "priority": 0,
+      "enabled": true
+    }}
+  ]
+}})
+```
+
+**inject_as options:**
+- `system`: Prepend to every agent's system prompt
+- `context`: Add as conversation context
+- `knowledge`: Make searchable via RAG
+
 ## Agent Memory
 
 Agents have a built-in memory system that allows them to remember facts about users across conversations:
 - Memory is **enabled by default** for all agents
-- When enabled, the agent has a `remember` tool it can use to store key-value facts
-- Memories are scoped per-user and per-conversation
+- When enabled, the agent has `remember`, `recall`, and `forget` tools
 - Memory only works for **authenticated users** (not anonymous visitors)
-- Use `get_memory_status` to check if memory is enabled
-- Use `set_memory_enabled` to enable or disable memory
+- Use `get_memory_status` to check current memory configuration
+- Use `set_memory_enabled` to quickly enable or disable memory
+- Use `configure_memory` for advanced memory settings
+
+**Memory Scopes:**
+- `conversation` - Memories only for this chat session
+- `user` - Memories persist across all conversations for this user (default)
+- `system` - Memories shared with other agents in the system
+
+**Advanced Configuration (via `configure_memory`):**
+- `default_scope` - Default scope for new memories (default: "user")
+- `allowed_scopes` - Which scopes the agent can use (default: all)
+- `auto_recall` - Auto-load memories at conversation start (default: true)
+- `max_memories_in_prompt` - Limit memories in system prompt (default: 50)
+- `include_system_memories` - Include memories from other agents (default: true)
+- `retention_days` - Auto-delete memories after N days (default: null = forever)
 
 **When to disable memory:**
 - Public-facing agents where you don't want user data stored
@@ -138,6 +194,28 @@ Every agent can have a **spec** - a human-readable description of its intended b
 - `update_agent_spec` - Update the current agent's spec
 
 **Best practice:** When building an agent, start by writing or reviewing the spec, then craft the system prompt to implement that spec. This ensures alignment between intended and actual behavior.
+
+## File Upload Configuration
+
+Agents can accept file uploads from users. Use `update_file_config` to configure:
+- **enabled**: Turn file uploads on/off for this agent
+- **max_file_size_mb**: Maximum file size (default: 100MB)
+- **allowed_types**: MIME type patterns like `image/*`, `application/pdf`, `text/*`
+- **ocr_provider**: Extract text from images/PDFs using:
+  - `tesseract` (local, free)
+  - `google_vision` (Google Cloud Vision API)
+  - `aws_textract` (AWS Textract)
+  - `azure_di` (Azure Document Intelligence)
+- **vision_provider**: AI image understanding using:
+  - `openai` (GPT-4 Vision)
+  - `anthropic` (Claude Vision)
+  - `gemini` (Google Gemini)
+- **enable_thumbnails**: Generate preview thumbnails for images
+
+**Example configurations:**
+- Document processing agent: Enable PDF, DOCX, use `tesseract` for OCR
+- Image analysis agent: Enable `image/*`, use `openai` vision provider
+- General assistant: Enable common types, no OCR/vision needed
 
 ## Spec Document System (Advanced)
 
@@ -210,14 +288,41 @@ Be conversational and helpful. Guide users through the process step by step.
 
 **Be conservative with ambiguous requests.** When in doubt, ask for clarification rather than taking action.
 
-## IMPORTANT: Always End with a Summary
+## IMPORTANT: Always Provide Clear Summaries
 
-After completing any actions (creating agents, updating prompts, adding tools, etc.), ALWAYS end your response with a brief summary of what you did. For example:
-- "I've created the 'Customer Support' agent with a helpful assistant prompt and added the search_orders tool."
+### After Individual Actions
+After completing any actions (creating agents, updating prompts, adding tools, etc.), briefly mention what you did:
 - "I've updated the system prompt to make the agent respond in pirate speak."
-- "I've added 3 sub-agent tools to the Orchestrator: billing_specialist, tech_support, and returns_handler."
+- "I've added the search_orders tool to the agent."
 
-This helps users understand what changes were made without having to expand the tool results.
+### After Completing a Task or Request
+When you've finished fulfilling a user's request (especially multi-step tasks), ALWAYS provide a comprehensive **Task Completion Summary** that includes:
+
+1. **What was accomplished**: A clear statement of what you achieved
+2. **Changes made**: List the specific modifications (agents created, prompts updated, tools added, etc.)
+3. **Current state**: Brief description of how the agent/system is now configured
+4. **Next steps** (if applicable): Suggestions for testing or further improvements
+
+**Example Task Completion Summary:**
+```
+## ✅ Task Complete
+
+I've set up your Customer Support system with the following:
+
+**Created:**
+- Customer Support Bot (customer-support) - Main entry point
+- Billing Specialist (billing-specialist) - Handles payment questions
+- Tech Support (tech-support) - Handles technical issues
+
+**Configured:**
+- Added sub-agent routing to the main bot
+- Each specialist has domain-specific system prompts
+- All agents share access to the knowledge base
+
+**Ready to test:** Try asking the Customer Support Bot about a billing issue - it should route to the Billing Specialist.
+```
+
+This summary format helps users understand exactly what was built and how to use it.
 
 Current agent being edited: {agent_context}
 """
@@ -359,6 +464,48 @@ BUILDER_TOOLS = [
             "parameters": {
                 "type": "object",
                 "properties": {},
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "configure_memory",
+            "description": "Configure advanced memory settings for the agent. Memory allows agents to remember facts about users across conversations with different scopes: 'conversation' (this chat only), 'user' (persists across chats), 'system' (shared with other agents).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "enabled": {
+                        "type": "boolean",
+                        "description": "Whether memory is enabled. Default: true",
+                    },
+                    "default_scope": {
+                        "type": "string",
+                        "enum": ["conversation", "user", "system"],
+                        "description": "Default scope for new memories. 'conversation' = this chat only, 'user' = persists across chats, 'system' = shared with other agents. Default: 'user'",
+                    },
+                    "allowed_scopes": {
+                        "type": "array",
+                        "items": {"type": "string", "enum": ["conversation", "user", "system"]},
+                        "description": "Which scopes the agent can use. Default: all scopes",
+                    },
+                    "auto_recall": {
+                        "type": "boolean",
+                        "description": "Whether to automatically recall memories at the start of conversations. Default: true",
+                    },
+                    "max_memories_in_prompt": {
+                        "type": "integer",
+                        "description": "Maximum number of memories to include in the system prompt. Default: 50",
+                    },
+                    "include_system_memories": {
+                        "type": "boolean",
+                        "description": "Whether to include system-scoped memories from other agents. Default: true",
+                    },
+                    "retention_days": {
+                        "type": "integer",
+                        "description": "Number of days to retain memories. Null = forever. Default: null",
+                    },
+                },
             },
         },
     },
@@ -692,6 +839,45 @@ BUILDER_TOOLS = [
                     "chunk_overlap": {
                         "type": "integer",
                         "description": "Overlap between chunks. Default: 50",
+                    },
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "update_file_config",
+            "description": "Update the file upload and processing configuration for the agent. Controls what files users can upload and how they are processed.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "enabled": {
+                        "type": "boolean",
+                        "description": "Enable or disable file uploads for this agent",
+                    },
+                    "max_file_size_mb": {
+                        "type": "integer",
+                        "description": "Maximum file size in megabytes. Default: 100",
+                    },
+                    "allowed_types": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "List of allowed MIME types or patterns (e.g., 'image/*', 'application/pdf', 'text/*'). Default: ['image/*', 'application/pdf', 'text/*']",
+                    },
+                    "ocr_provider": {
+                        "type": "string",
+                        "enum": ["tesseract", "google_vision", "aws_textract", "azure_di", None],
+                        "description": "OCR provider for text extraction from images/PDFs. Options: tesseract (local), google_vision, aws_textract, azure_di. Set to null to disable OCR.",
+                    },
+                    "vision_provider": {
+                        "type": "string",
+                        "enum": ["openai", "anthropic", "gemini", None],
+                        "description": "AI vision provider for image understanding. Options: openai (GPT-4V), anthropic (Claude Vision), gemini. Set to null to disable vision.",
+                    },
+                    "enable_thumbnails": {
+                        "type": "boolean",
+                        "description": "Generate thumbnails for uploaded images. Default: true",
                     },
                 },
             },
@@ -1105,6 +1291,166 @@ BUILDER_TOOLS = [
             },
         },
     },
+    # ==========================================================================
+    # System Management Tools - Create, modify, and delete multi-agent systems
+    # ==========================================================================
+    {
+        "type": "function",
+        "function": {
+            "name": "create_system",
+            "description": "Create a new multi-agent system. A system groups related agents that work together, with one agent as the entry point that handles initial requests.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "description": "Human-readable name for the system (e.g., 'Customer Support')",
+                    },
+                    "slug": {
+                        "type": "string",
+                        "description": "Unique identifier slug (e.g., 'customer-support'). If not provided, will be generated from name.",
+                    },
+                    "description": {
+                        "type": "string",
+                        "description": "Description of what this system does",
+                    },
+                    "entry_agent_slug": {
+                        "type": "string",
+                        "description": "Slug of the agent that handles initial requests (entry point)",
+                    },
+                    "auto_discover": {
+                        "type": "boolean",
+                        "description": "If true, automatically discover and add all sub-agents reachable from the entry agent. Default: true",
+                    },
+                },
+                "required": ["name", "entry_agent_slug"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "add_agent_to_system",
+            "description": "Add an agent to a multi-agent system as a member.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "system_slug": {
+                        "type": "string",
+                        "description": "Slug of the system to add the agent to",
+                    },
+                    "agent_slug": {
+                        "type": "string",
+                        "description": "Slug of the agent to add",
+                    },
+                    "role": {
+                        "type": "string",
+                        "enum": ["specialist", "utility", "supervisor"],
+                        "description": "Role of the agent in the system. Default: 'specialist'",
+                    },
+                    "notes": {
+                        "type": "string",
+                        "description": "Optional notes about this agent's role in the system",
+                    },
+                },
+                "required": ["system_slug", "agent_slug"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "remove_agent_from_system",
+            "description": "Remove an agent from a multi-agent system. Cannot remove the entry point agent.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "system_slug": {
+                        "type": "string",
+                        "description": "Slug of the system to remove the agent from",
+                    },
+                    "agent_slug": {
+                        "type": "string",
+                        "description": "Slug of the agent to remove",
+                    },
+                },
+                "required": ["system_slug", "agent_slug"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "update_system_config",
+            "description": "Update a multi-agent system's configuration including name, description, entry agent, and shared knowledge.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "system_slug": {
+                        "type": "string",
+                        "description": "Slug of the system to update",
+                    },
+                    "name": {
+                        "type": "string",
+                        "description": "New name for the system",
+                    },
+                    "description": {
+                        "type": "string",
+                        "description": "New description for the system",
+                    },
+                    "entry_agent_slug": {
+                        "type": "string",
+                        "description": "Slug of the new entry point agent (must be a member of the system)",
+                    },
+                    "is_active": {
+                        "type": "boolean",
+                        "description": "Whether the system is active",
+                    },
+                    "shared_knowledge": {
+                        "type": "array",
+                        "description": "Shared knowledge items for all agents in the system. Each item has: key, title, content, inject_as ('system'|'context'|'knowledge'), priority, enabled",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "key": {"type": "string", "description": "Unique key for this knowledge item"},
+                                "title": {"type": "string", "description": "Title/name of the knowledge"},
+                                "content": {"type": "string", "description": "The knowledge content"},
+                                "inject_as": {
+                                    "type": "string",
+                                    "enum": ["system", "context", "knowledge"],
+                                    "description": "How to inject: 'system' (prepend to system prompt), 'context' (add as context), 'knowledge' (RAG searchable)",
+                                },
+                                "priority": {"type": "integer", "description": "Priority order (lower = higher priority)"},
+                                "enabled": {"type": "boolean", "description": "Whether this knowledge is active"},
+                            },
+                        },
+                    },
+                },
+                "required": ["system_slug"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "delete_system",
+            "description": "Delete a multi-agent system. This removes the system and all its member associations, but does NOT delete the agents themselves.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "system_slug": {
+                        "type": "string",
+                        "description": "Slug of the system to delete",
+                    },
+                    "confirm": {
+                        "type": "boolean",
+                        "description": "Must be true to confirm deletion",
+                    },
+                },
+                "required": ["system_slug", "confirm"],
+            },
+        },
+    },
 ]
 
 
@@ -1124,12 +1470,16 @@ class BuilderAgentRuntime(AgentRuntime):
         """Execute the builder agent with agentic loop."""
         # Get the agent being edited from context
         # Check both metadata (from frontend) and params (from API)
-        agent_id = ctx.metadata.get("agent_id") or ctx.params.get("agent_id")
+        initial_agent_id = ctx.metadata.get("agent_id") or ctx.params.get("agent_id")
         agent_context = "No agent selected. Ask the user what kind of agent they want to create."
 
-        if agent_id:
+        # Use a mutable container so switch_to_agent can update the current agent
+        # This allows the builder to work on different agents during a single run
+        current_agent = {"id": initial_agent_id}
+
+        if initial_agent_id:
             try:
-                agent = await sync_to_async(AgentDefinition.objects.get)(id=agent_id)
+                agent = await sync_to_async(AgentDefinition.objects.get)(id=initial_agent_id)
                 config = await sync_to_async(agent.get_effective_config)()
                 agent_context = f"""
 Agent: {agent.name} ({agent.slug})
@@ -1154,11 +1504,13 @@ Knowledge: {len(config.get('knowledge', []))} sources
         llm = get_llm_client_for_model(model)
 
         # Create tool executor function for the agentic loop
+        # Uses current_agent dict so switch_to_agent can update which agent we're working on
         async def execute_tool(tool_name: str, tool_args: dict) -> dict:
-            return await self._execute_tool(agent_id, tool_name, tool_args, ctx)
+            return await self._execute_tool(current_agent, tool_name, tool_args, ctx)
 
         # Use the shared agentic loop
         # Note: agentic_loop emits ASSISTANT_MESSAGE for the final response
+        # ensure_final_response=True ensures a summary is generated if tools were used
         result = await run_agentic_loop(
             llm=llm,
             messages=messages,
@@ -1168,6 +1520,7 @@ Knowledge: {len(config.get('knowledge', []))} sources
             model=model,
             max_iterations=10,
             temperature=0.7,
+            ensure_final_response=True,
         )
 
         return RunResult(
@@ -1177,16 +1530,27 @@ Knowledge: {len(config.get('knowledge', []))} sources
     
     async def _execute_tool(
         self,
-        agent_id: Optional[str],
+        current_agent: dict,
         tool_name: str,
         args: dict,
         ctx: RunContext,
     ) -> dict:
-        """Execute a builder tool."""
+        """Execute a builder tool.
+
+        Args:
+            current_agent: Mutable dict with 'id' key tracking the current agent.
+                          This allows switch_to_agent to update which agent we're working on.
+            tool_name: Name of the tool to execute
+            args: Tool arguments
+            ctx: Run context
+        """
         # Import here to avoid circular imports
         from django_agent_runtime.models import AgentKnowledge, DynamicTool
         from django_agent_runtime.dynamic_tools.scanner import ProjectScanner
         from django_agent_runtime.dynamic_tools.generator import ToolGenerator
+
+        agent_id = current_agent.get("id")
+        logger.info(f"_execute_tool: {tool_name} with current_agent={current_agent}")
 
         # Tools that don't require an agent
         if tool_name == "scan_project_for_tools":
@@ -1199,11 +1563,21 @@ Knowledge: {len(config.get('knowledge', []))} sources
             return await self._get_function_details(args, ctx)
 
         if tool_name == "create_agent":
-            return await self._create_agent(args, ctx)
+            result = await self._create_agent(args, ctx)
+            # If agent was created successfully, update current_agent to point to it
+            if result.get("success") and result.get("agent_id"):
+                current_agent["id"] = result["agent_id"]
+                logger.info(f"Updated current_agent to newly created agent: {result['agent_id']}")
+            return result
 
         # UI Control tools - these emit special events to control the frontend
         if tool_name == "switch_to_agent":
-            return await self._switch_to_agent(args, ctx)
+            result = await self._switch_to_agent(args, ctx)
+            # If switch was successful, update current_agent to the new agent
+            if result.get("success") and result.get("agent_id"):
+                current_agent["id"] = result["agent_id"]
+                logger.info(f"Updated current_agent to switched agent: {result['agent_id']}")
+            return result
 
         if tool_name == "switch_to_system":
             return await self._switch_to_system(args, ctx)
@@ -1216,6 +1590,22 @@ Knowledge: {len(config.get('knowledge', []))} sources
 
         if tool_name == "get_system_details":
             return await self._get_system_details(args, ctx)
+
+        # System management tools
+        if tool_name == "create_system":
+            return await self._create_system(args, ctx)
+
+        if tool_name == "add_agent_to_system":
+            return await self._add_agent_to_system(args, ctx)
+
+        if tool_name == "remove_agent_from_system":
+            return await self._remove_agent_from_system(args, ctx)
+
+        if tool_name == "update_system_config":
+            return await self._update_system_config(args, ctx)
+
+        if tool_name == "delete_system":
+            return await self._delete_system(args, ctx)
 
         # Tools that require an agent
         if not agent_id:
@@ -1251,20 +1641,56 @@ Knowledge: {len(config.get('knowledge', []))} sources
                 return {"success": True, "message": "Agent name updated"}
 
             elif tool_name == "get_agent_spec":
+                # Get spec from linked SpecDocument
+                from django_agent_runtime.models import SpecDocument
+                spec_doc = await sync_to_async(
+                    lambda: SpecDocument.objects.filter(linked_agent=agent).first()
+                )()
+                spec_content = spec_doc.content if spec_doc else ""
                 return {
-                    "spec": agent.spec or "",
-                    "has_spec": bool(agent.spec),
+                    "spec": spec_content,
+                    "has_spec": bool(spec_content),
+                    "spec_document_id": str(spec_doc.id) if spec_doc else None,
+                    "spec_document_title": spec_doc.title if spec_doc else None,
                     "message": "The agent spec describes intended behavior in plain English, separate from the technical system prompt.",
                 }
 
             elif tool_name == "update_agent_spec":
-                agent.spec = args["spec"]
-                await sync_to_async(agent.save)()
+                # Update or create linked SpecDocument
+                from django_agent_runtime.models import SpecDocument
+                logger.info(f"update_agent_spec called for agent {agent.id} ({agent.slug})")
+
+                spec_content = args["spec"]
+
+                # Find or create the spec document for this agent
+                def update_or_create_spec():
+                    spec_doc = SpecDocument.objects.filter(linked_agent=agent).first()
+                    if spec_doc:
+                        # Update existing document
+                        spec_doc.content = spec_content
+                        spec_doc.save()  # This auto-creates a version
+                        return spec_doc, False
+                    else:
+                        # Create new document
+                        spec_doc = SpecDocument.objects.create(
+                            title=f"{agent.name} Specification",
+                            content=spec_content,
+                            linked_agent=agent,
+                            owner=agent.owner,
+                        )
+                        return spec_doc, True
+
+                spec_doc, created = await sync_to_async(update_or_create_spec)()
+                logger.info(f"{'Created' if created else 'Updated'} spec document {spec_doc.id} for agent {agent.id}")
+
                 await create_revision(agent, comment="Updated agent specification")
                 return {
                     "success": True,
-                    "message": "Agent specification updated",
-                    "spec_preview": agent.spec[:200] + "..." if len(agent.spec) > 200 else agent.spec,
+                    "message": f"Agent specification {'created' if created else 'updated'} for '{agent.name}' ({agent.slug})",
+                    "agent_id": str(agent.id),
+                    "agent_slug": agent.slug,
+                    "spec_document_id": str(spec_doc.id),
+                    "spec_preview": spec_content[:200] + "..." if len(spec_content) > 200 else spec_content,
                 }
 
             elif tool_name == "update_model_settings":
@@ -1301,10 +1727,70 @@ Knowledge: {len(config.get('knowledge', []))} sources
                 if version:
                     extra = version.extra_config or {}
                     enabled = extra.get("memory_enabled", True)  # Default is True
+                    default_scope = extra.get("memory_default_scope", "user")
+                    allowed_scopes = extra.get("memory_allowed_scopes", ["conversation", "user", "system"])
+                    auto_recall = extra.get("memory_auto_recall", True)
+                    max_in_prompt = extra.get("memory_max_in_prompt", 50)
+                    include_system = extra.get("memory_include_system", True)
+                    retention_days = extra.get("memory_retention_days", None)
                     return {
                         "memory_enabled": enabled,
+                        "default_scope": default_scope,
+                        "allowed_scopes": allowed_scopes,
+                        "auto_recall": auto_recall,
+                        "max_memories_in_prompt": max_in_prompt,
+                        "include_system_memories": include_system,
+                        "retention_days": retention_days,
                         "message": f"Memory is {'enabled' if enabled else 'disabled'} for this agent",
-                        "note": "When enabled, the agent has a 'remember' tool to store facts about users. Memory only works for authenticated users.",
+                        "note": "When enabled, the agent has 'remember', 'recall', and 'forget' tools. Memory scopes: 'conversation' (this chat), 'user' (persists), 'system' (shared).",
+                    }
+                return {"error": "No active version found"}
+
+            elif tool_name == "configure_memory":
+                if version:
+                    if version.extra_config is None:
+                        version.extra_config = {}
+
+                    changes = []
+                    if "enabled" in args:
+                        version.extra_config["memory_enabled"] = args["enabled"]
+                        changes.append(f"enabled={args['enabled']}")
+                    if "default_scope" in args:
+                        version.extra_config["memory_default_scope"] = args["default_scope"]
+                        changes.append(f"default_scope={args['default_scope']}")
+                    if "allowed_scopes" in args:
+                        version.extra_config["memory_allowed_scopes"] = args["allowed_scopes"]
+                        changes.append(f"allowed_scopes={args['allowed_scopes']}")
+                    if "auto_recall" in args:
+                        version.extra_config["memory_auto_recall"] = args["auto_recall"]
+                        changes.append(f"auto_recall={args['auto_recall']}")
+                    if "max_memories_in_prompt" in args:
+                        version.extra_config["memory_max_in_prompt"] = args["max_memories_in_prompt"]
+                        changes.append(f"max_memories={args['max_memories_in_prompt']}")
+                    if "include_system_memories" in args:
+                        version.extra_config["memory_include_system"] = args["include_system_memories"]
+                        changes.append(f"include_system={args['include_system_memories']}")
+                    if "retention_days" in args:
+                        version.extra_config["memory_retention_days"] = args["retention_days"]
+                        changes.append(f"retention_days={args['retention_days']}")
+
+                    await sync_to_async(version.save)()
+                    await create_revision(agent, comment=f"Memory config: {', '.join(changes)}")
+
+                    # Return current config
+                    extra = version.extra_config
+                    return {
+                        "success": True,
+                        "message": f"Memory configuration updated: {', '.join(changes)}",
+                        "config": {
+                            "enabled": extra.get("memory_enabled", True),
+                            "default_scope": extra.get("memory_default_scope", "user"),
+                            "allowed_scopes": extra.get("memory_allowed_scopes", ["conversation", "user", "system"]),
+                            "auto_recall": extra.get("memory_auto_recall", True),
+                            "max_memories_in_prompt": extra.get("memory_max_in_prompt", 50),
+                            "include_system_memories": extra.get("memory_include_system", True),
+                            "retention_days": extra.get("memory_retention_days", None),
+                        },
                     }
                 return {"error": "No active version found"}
 
@@ -1373,6 +1859,9 @@ Knowledge: {len(config.get('knowledge', []))} sources
 
             elif tool_name == "update_rag_config":
                 return await self._update_rag_config(agent, args, ctx)
+
+            elif tool_name == "update_file_config":
+                return await self._update_file_config(agent, args, ctx)
 
             elif tool_name == "add_tool_from_function":
                 return await self._add_tool_from_function(agent, args, ctx)
@@ -1900,6 +2389,47 @@ Knowledge: {len(config.get('knowledge', []))} sources
             logger.exception("Error updating RAG config")
             return {"error": str(e)}
 
+    async def _update_file_config(self, agent, args: dict, ctx: RunContext) -> dict:
+        """Update the file upload and processing configuration for the agent."""
+        try:
+            # Get current config with defaults
+            current_config = agent.file_config or {
+                "enabled": False,
+                "max_file_size_mb": 100,
+                "allowed_types": ["image/*", "application/pdf", "text/*"],
+                "ocr_provider": None,
+                "vision_provider": None,
+                "enable_thumbnails": True,
+            }
+
+            # Update with provided values
+            if "enabled" in args:
+                current_config["enabled"] = args["enabled"]
+            if "max_file_size_mb" in args:
+                current_config["max_file_size_mb"] = args["max_file_size_mb"]
+            if "allowed_types" in args:
+                current_config["allowed_types"] = args["allowed_types"]
+            if "ocr_provider" in args:
+                current_config["ocr_provider"] = args["ocr_provider"]
+            if "vision_provider" in args:
+                current_config["vision_provider"] = args["vision_provider"]
+            if "enable_thumbnails" in args:
+                current_config["enable_thumbnails"] = args["enable_thumbnails"]
+
+            # Save
+            agent.file_config = current_config
+            await sync_to_async(agent.save)(update_fields=["file_config"])
+            await create_revision(agent, comment="Updated file upload configuration")
+
+            return {
+                "success": True,
+                "message": "File upload configuration updated",
+                "config": current_config,
+            }
+        except Exception as e:
+            logger.exception("Error updating file config")
+            return {"error": str(e)}
+
     # ==========================================================================
     # Multi-Agent / Sub-Agent Tools
     # ==========================================================================
@@ -2346,6 +2876,276 @@ Knowledge: {len(config.get('knowledge', []))} sources
             return {"error": f"System not found: {system_slug or system_id}"}
         except Exception as e:
             logger.exception("Error getting system details")
+            return {"error": str(e)}
+
+    # ==================== System Management Methods ====================
+
+    async def _create_system(self, args: dict, ctx: RunContext) -> dict:
+        """Create a new multi-agent system."""
+        from django_agent_runtime.models import AgentSystem
+        from django_agent_runtime.services.multi_agent import create_system_from_entry_agent
+
+        name = args.get("name")
+        entry_agent_slug = args.get("entry_agent_slug")
+
+        if not name or not entry_agent_slug:
+            return {"error": "name and entry_agent_slug are required"}
+
+        # Generate slug if not provided
+        slug = args.get("slug")
+        if not slug:
+            slug = slugify(name)
+
+        description = args.get("description", "")
+        auto_discover = args.get("auto_discover", True)
+
+        try:
+            # Check if slug already exists
+            if await sync_to_async(AgentSystem.objects.filter(slug=slug).exists)():
+                return {"error": f"System with slug '{slug}' already exists"}
+
+            # Get the entry agent
+            try:
+                entry_agent = await sync_to_async(AgentDefinition.objects.get)(slug=entry_agent_slug)
+            except AgentDefinition.DoesNotExist:
+                return {"error": f"Entry agent not found: {entry_agent_slug}"}
+
+            # Get owner from context if available
+            owner = getattr(ctx, 'user', None)
+
+            # Create the system
+            system = await sync_to_async(create_system_from_entry_agent)(
+                slug=slug,
+                name=name,
+                entry_agent=entry_agent,
+                description=description,
+                owner=owner,
+                auto_discover=auto_discover,
+            )
+
+            # Get member count
+            member_count = await sync_to_async(system.members.count)()
+
+            return {
+                "success": True,
+                "message": f"Created system '{name}' with {member_count} member(s)",
+                "system_id": str(system.id),
+                "system_slug": system.slug,
+                "member_count": member_count,
+                "entry_agent_slug": entry_agent.slug,
+            }
+        except Exception as e:
+            logger.exception("Error creating system")
+            return {"error": str(e)}
+
+    async def _add_agent_to_system(self, args: dict, ctx: RunContext) -> dict:
+        """Add an agent to a multi-agent system."""
+        from django_agent_runtime.models import AgentSystem, AgentSystemMember
+        from django_agent_runtime.services.multi_agent import add_agent_to_system
+
+        system_slug = args.get("system_slug")
+        agent_slug = args.get("agent_slug")
+
+        if not system_slug or not agent_slug:
+            return {"error": "system_slug and agent_slug are required"}
+
+        role = args.get("role", "specialist")
+        notes = args.get("notes", "")
+
+        try:
+            # Get the system
+            try:
+                system = await sync_to_async(AgentSystem.objects.get)(slug=system_slug)
+            except AgentSystem.DoesNotExist:
+                return {"error": f"System not found: {system_slug}"}
+
+            # Get the agent
+            try:
+                agent = await sync_to_async(AgentDefinition.objects.get)(slug=agent_slug)
+            except AgentDefinition.DoesNotExist:
+                return {"error": f"Agent not found: {agent_slug}"}
+
+            # Check if agent is already a member
+            existing = await sync_to_async(
+                system.members.filter(agent=agent).exists
+            )()
+            if existing:
+                return {"error": f"Agent '{agent_slug}' is already a member of system '{system_slug}'"}
+
+            # Map role string to enum
+            role_map = {
+                "specialist": AgentSystemMember.Role.SPECIALIST,
+                "utility": AgentSystemMember.Role.UTILITY,
+                "supervisor": AgentSystemMember.Role.SUPERVISOR,
+                "entry_point": AgentSystemMember.Role.ENTRY_POINT,
+            }
+            role_enum = role_map.get(role, AgentSystemMember.Role.SPECIALIST)
+
+            # Add the agent
+            member = await sync_to_async(add_agent_to_system)(
+                system=system,
+                agent=agent,
+                role=role_enum,
+                notes=notes,
+            )
+
+            return {
+                "success": True,
+                "message": f"Added agent '{agent_slug}' to system '{system_slug}' as {role}",
+                "member_id": str(member.id),
+                "agent_slug": agent_slug,
+                "role": role,
+            }
+        except Exception as e:
+            logger.exception("Error adding agent to system")
+            return {"error": str(e)}
+
+    async def _remove_agent_from_system(self, args: dict, ctx: RunContext) -> dict:
+        """Remove an agent from a multi-agent system."""
+        from django_agent_runtime.models import AgentSystem
+
+        system_slug = args.get("system_slug")
+        agent_slug = args.get("agent_slug")
+
+        if not system_slug or not agent_slug:
+            return {"error": "system_slug and agent_slug are required"}
+
+        try:
+            # Get the system
+            try:
+                system = await sync_to_async(AgentSystem.objects.get)(slug=system_slug)
+            except AgentSystem.DoesNotExist:
+                return {"error": f"System not found: {system_slug}"}
+
+            # Get the agent
+            try:
+                agent = await sync_to_async(AgentDefinition.objects.get)(slug=agent_slug)
+            except AgentDefinition.DoesNotExist:
+                return {"error": f"Agent not found: {agent_slug}"}
+
+            # Check if this is the entry agent
+            entry_agent = await sync_to_async(lambda: system.entry_agent)()
+            if entry_agent and entry_agent.slug == agent_slug:
+                return {"error": f"Cannot remove entry agent '{agent_slug}'. Change the entry agent first."}
+
+            # Find and delete the membership
+            member = await sync_to_async(
+                system.members.filter(agent=agent).first
+            )()
+            if not member:
+                return {"error": f"Agent '{agent_slug}' is not a member of system '{system_slug}'"}
+
+            await sync_to_async(member.delete)()
+
+            return {
+                "success": True,
+                "message": f"Removed agent '{agent_slug}' from system '{system_slug}'",
+            }
+        except Exception as e:
+            logger.exception("Error removing agent from system")
+            return {"error": str(e)}
+
+    async def _update_system_config(self, args: dict, ctx: RunContext) -> dict:
+        """Update a multi-agent system's configuration."""
+        from django_agent_runtime.models import AgentSystem
+
+        system_slug = args.get("system_slug")
+        if not system_slug:
+            return {"error": "system_slug is required"}
+
+        try:
+            # Get the system
+            try:
+                system = await sync_to_async(AgentSystem.objects.get)(slug=system_slug)
+            except AgentSystem.DoesNotExist:
+                return {"error": f"System not found: {system_slug}"}
+
+            changes = []
+
+            # Update name
+            if "name" in args:
+                system.name = args["name"]
+                changes.append(f"name='{args['name']}'")
+
+            # Update description
+            if "description" in args:
+                system.description = args["description"]
+                changes.append("description updated")
+
+            # Update is_active
+            if "is_active" in args:
+                system.is_active = args["is_active"]
+                changes.append(f"is_active={args['is_active']}")
+
+            # Update entry agent
+            if "entry_agent_slug" in args:
+                new_entry_slug = args["entry_agent_slug"]
+                try:
+                    new_entry = await sync_to_async(AgentDefinition.objects.get)(slug=new_entry_slug)
+                except AgentDefinition.DoesNotExist:
+                    return {"error": f"Entry agent not found: {new_entry_slug}"}
+
+                # Verify the new entry agent is a member
+                is_member = await sync_to_async(
+                    system.members.filter(agent=new_entry).exists
+                )()
+                if not is_member:
+                    return {"error": f"Agent '{new_entry_slug}' must be a member of the system before becoming entry agent"}
+
+                system.entry_agent = new_entry
+                changes.append(f"entry_agent='{new_entry_slug}'")
+
+            # Update shared knowledge
+            if "shared_knowledge" in args:
+                system.shared_knowledge = args["shared_knowledge"]
+                changes.append(f"shared_knowledge ({len(args['shared_knowledge'])} items)")
+
+            if not changes:
+                return {"message": "No changes specified"}
+
+            await sync_to_async(system.save)()
+
+            return {
+                "success": True,
+                "message": f"Updated system '{system_slug}': {', '.join(changes)}",
+                "changes": changes,
+            }
+        except Exception as e:
+            logger.exception("Error updating system config")
+            return {"error": str(e)}
+
+    async def _delete_system(self, args: dict, ctx: RunContext) -> dict:
+        """Delete a multi-agent system."""
+        from django_agent_runtime.models import AgentSystem
+
+        system_slug = args.get("system_slug")
+        confirm = args.get("confirm", False)
+
+        if not system_slug:
+            return {"error": "system_slug is required"}
+
+        if not confirm:
+            return {"error": "Must set confirm=true to delete a system"}
+
+        try:
+            # Get the system
+            try:
+                system = await sync_to_async(AgentSystem.objects.get)(slug=system_slug)
+            except AgentSystem.DoesNotExist:
+                return {"error": f"System not found: {system_slug}"}
+
+            system_name = system.name
+            member_count = await sync_to_async(system.members.count)()
+
+            # Delete the system (cascades to members, versions, snapshots)
+            await sync_to_async(system.delete)()
+
+            return {
+                "success": True,
+                "message": f"Deleted system '{system_name}' ({system_slug}) with {member_count} member(s). Agents were NOT deleted.",
+            }
+        except Exception as e:
+            logger.exception("Error deleting system")
             return {"error": str(e)}
 
     # ==================== Spec Document Methods ====================
