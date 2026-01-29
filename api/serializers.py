@@ -570,11 +570,28 @@ class AgentSystemCreateSerializer(serializers.Serializer):
     slug = serializers.SlugField(max_length=100)
     name = serializers.CharField(max_length=255)
     description = serializers.CharField(required=False, default="")
-    entry_agent_id = serializers.UUIDField(help_text="ID of the entry point agent")
+    # Accept both entry_agent_id and entry_agent for flexibility
+    entry_agent_id = serializers.UUIDField(
+        required=False,
+        help_text="ID of the entry point agent",
+    )
+    entry_agent = serializers.UUIDField(
+        required=False,
+        help_text="ID of the entry point agent (alias for entry_agent_id)",
+    )
     auto_discover = serializers.BooleanField(
         default=True,
         help_text="Automatically discover and add all reachable sub-agents",
     )
+
+    def validate(self, data):
+        """Normalize entry_agent to entry_agent_id."""
+        # Accept either entry_agent or entry_agent_id
+        if 'entry_agent' in data and data['entry_agent']:
+            data['entry_agent_id'] = data.pop('entry_agent')
+        elif 'entry_agent' in data:
+            data.pop('entry_agent')
+        return data
 
 
 class AddMemberSerializer(serializers.Serializer):

@@ -1434,20 +1434,30 @@ class AgentSystemListCreateView(generics.ListCreateAPIView):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        # Get the entry agent
-        entry_agent = get_agent_for_user(request.user, serializer.validated_data['entry_agent_id'])
+        entry_agent_id = serializer.validated_data.get('entry_agent_id')
 
-        # Use the service to create the system
-        from django_agent_runtime.services.multi_agent import create_system_from_entry_agent
+        if entry_agent_id:
+            # Get the entry agent and use the service to create with auto-discovery
+            entry_agent = get_agent_for_user(request.user, entry_agent_id)
 
-        system = create_system_from_entry_agent(
-            slug=serializer.validated_data['slug'],
-            name=serializer.validated_data['name'],
-            entry_agent=entry_agent,
-            description=serializer.validated_data.get('description', ''),
-            owner=request.user,
-            auto_discover=serializer.validated_data.get('auto_discover', True),
-        )
+            from django_agent_runtime.services.multi_agent import create_system_from_entry_agent
+
+            system = create_system_from_entry_agent(
+                slug=serializer.validated_data['slug'],
+                name=serializer.validated_data['name'],
+                entry_agent=entry_agent,
+                description=serializer.validated_data.get('description', ''),
+                owner=request.user,
+                auto_discover=serializer.validated_data.get('auto_discover', True),
+            )
+        else:
+            # Create system without entry agent - can be set later
+            system = AgentSystem.objects.create(
+                slug=serializer.validated_data['slug'],
+                name=serializer.validated_data['name'],
+                description=serializer.validated_data.get('description', ''),
+                owner=request.user,
+            )
 
         return Response(
             AgentSystemDetailSerializer(system).data,

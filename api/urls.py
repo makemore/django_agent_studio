@@ -8,8 +8,8 @@ from django_agent_studio.api import views
 
 urlpatterns = [
     # Agent definition CRUD
-    path("agents/", views.AgentDefinitionListCreateView.as_view(), name="agent_list"),
-    path("agents/<uuid:pk>/", views.AgentDefinitionDetailView.as_view(), name="agent_detail"),
+    path("agents/", views.AgentDefinitionListCreateView.as_view(), name="api_agent_list"),
+    path("agents/<uuid:pk>/", views.AgentDefinitionDetailView.as_view(), name="api_agent_detail"),
 
     # Agent versions
     path(
@@ -194,46 +194,46 @@ urlpatterns = [
     path(
         "systems/",
         views.AgentSystemListCreateView.as_view(),
-        name="system_list",
+        name="api_system_list",
     ),
     path(
         "systems/<uuid:pk>/",
         views.AgentSystemDetailView.as_view(),
-        name="system_detail",
+        name="api_system_detail",
     ),
 
     # System members
     path(
         "systems/<uuid:system_id>/members/",
         views.AgentSystemMemberListCreateView.as_view(),
-        name="system_member_list",
+        name="api_system_member_list",
     ),
     path(
         "systems/<uuid:system_id>/members/<uuid:pk>/",
         views.AgentSystemMemberDetailView.as_view(),
-        name="system_member_detail",
+        name="api_system_member_detail",
     ),
 
     # System versions
     path(
         "systems/<uuid:system_id>/versions/",
         views.AgentSystemVersionListView.as_view(),
-        name="system_version_list",
+        name="api_system_version_list",
     ),
     path(
         "systems/<uuid:system_id>/publish/",
         views.AgentSystemPublishView.as_view(),
-        name="system_publish",
+        name="api_system_publish",
     ),
     path(
         "systems/<uuid:system_id>/versions/<uuid:version_id>/deploy/",
         views.AgentSystemDeployView.as_view(),
-        name="system_deploy",
+        name="api_system_deploy",
     ),
     path(
         "systems/<uuid:system_id>/versions/<uuid:version_id>/export/",
         views.AgentSystemExportView.as_view(),
-        name="system_export",
+        name="api_system_export",
     ),
 
     # Discover agents from entry point

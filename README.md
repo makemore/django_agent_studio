@@ -6,6 +6,7 @@ A visual agent builder and management interface for Django applications. Create,
 
 | Version | Date | Changes |
 |---------|------|---------|
+| **0.3.0** | 2026-01-29 | **System Listing & Navigation** - Browse and test multi-agent systems from homepage, fixed URL routing for My Systems/My Agents links, system creation now supports optional entry agent |
 | **0.2.0** | 2026-01-28 | **Multi-Agent Systems** - System management UI, shared memory configuration, memory privacy controls, builder tools for managing agent systems |
 | **0.1.9** | 2026-01-27 | Spec documents migration, improved builder agent |
 | **0.1.0** | 2026-01-25 | Initial release with builder interface, dynamic tools, knowledge management |
