@@ -24,6 +24,10 @@ from django_agent_runtime.models import (
     AgentSystemMember,
     AgentSystemVersion,
     AgentSystemSnapshot,
+    # Collaborator models
+    CollaboratorRole,
+    AgentCollaborator,
+    SystemCollaborator,
 )
 from django_agent_studio.api.serializers import (
     AgentDefinitionListSerializer,
@@ -36,6 +40,11 @@ from django_agent_studio.api.serializers import (
     DynamicToolExecutionSerializer,
     ProjectScanRequestSerializer,
     GenerateToolsRequestSerializer,
+    # Collaborator serializers
+    AgentCollaboratorSerializer,
+    SystemCollaboratorSerializer,
+    AddCollaboratorSerializer,
+    UpdateCollaboratorRoleSerializer,
 )
 
 
@@ -43,16 +52,49 @@ from django_agent_studio.api.serializers import (
 # Helper functions for consistent access control
 # =============================================================================
 
+from django.db.models import Q
+
+
 def get_agent_for_user(user, agent_id):
     """
     Get an agent if the user has access.
 
     - Superusers can access any agent
-    - Regular users can only access their own agents
+    - Owners can access their own agents
+    - Collaborators can access agents they've been granted access to
+    - Users with system access can access agents in that system
     """
     if user.is_superuser:
         return get_object_or_404(AgentDefinition, id=agent_id)
-    return get_object_or_404(AgentDefinition, id=agent_id, owner=user)
+
+    # Try to get the agent
+    agent = get_object_or_404(AgentDefinition, id=agent_id)
+
+    # Check if owner
+    if agent.owner == user:
+        return agent
+
+    # Check if direct collaborator on agent
+    if AgentCollaborator.objects.filter(agent=agent, user=user).exists():
+        return agent
+
+    # Check if user has access via a system that contains this agent
+    # Get all systems this agent belongs to
+    agent_system_ids = AgentSystemMember.objects.filter(
+        agent=agent
+    ).values_list('system_id', flat=True)
+
+    if agent_system_ids:
+        # Check if user owns or is a collaborator on any of these systems
+        has_system_access = AgentSystem.objects.filter(
+            Q(id__in=agent_system_ids) &
+            (Q(owner=user) | Q(collaborators__user=user))
+        ).exists()
+        if has_system_access:
+            return agent
+
+    # No access
+    raise Http404("Agent not found")
 
 
 def get_agent_queryset_for_user(user):
@@ -60,11 +102,29 @@ def get_agent_queryset_for_user(user):
     Get queryset of agents accessible to the user.
 
     - Superusers can see all agents
-    - Regular users see only their own agents
+    - Regular users see:
+      - Owned agents
+      - Agents where they are direct collaborators
+      - Agents in systems they own or are collaborators on
     """
     if user.is_superuser:
         return AgentDefinition.objects.all()
-    return AgentDefinition.objects.filter(owner=user)
+
+    # Get system IDs the user has access to (owner or collaborator)
+    accessible_system_ids = AgentSystem.objects.filter(
+        Q(owner=user) | Q(collaborators__user=user)
+    ).values_list('id', flat=True)
+
+    # Get agent IDs that are members of accessible systems
+    agents_via_systems = AgentSystemMember.objects.filter(
+        system_id__in=accessible_system_ids
+    ).values_list('agent_id', flat=True)
+
+    return AgentDefinition.objects.filter(
+        Q(owner=user) |
+        Q(collaborators__user=user) |
+        Q(id__in=agents_via_systems)
+    ).distinct()
 
 
 def get_system_for_user(user, system_id):
@@ -72,11 +132,27 @@ def get_system_for_user(user, system_id):
     Get a system if the user has access.
 
     - Superusers can access any system
-    - Regular users can only access their own systems
+    - Owners can access their own systems
+    - Collaborators can access systems they've been granted access to
     """
+    from django_agent_runtime.models import SystemCollaborator
+
     if user.is_superuser:
         return get_object_or_404(AgentSystem, id=system_id)
-    return get_object_or_404(AgentSystem, id=system_id, owner=user)
+
+    # Try to get the system
+    system = get_object_or_404(AgentSystem, id=system_id)
+
+    # Check if owner
+    if system.owner == user:
+        return system
+
+    # Check if collaborator
+    if SystemCollaborator.objects.filter(system=system, user=user).exists():
+        return system
+
+    # No access
+    raise Http404("System not found")
 
 
 def get_system_queryset_for_user(user):
@@ -84,11 +160,13 @@ def get_system_queryset_for_user(user):
     Get queryset of systems accessible to the user.
 
     - Superusers can see all systems
-    - Regular users see only their own systems
+    - Regular users see owned systems and systems where they are collaborators
     """
     if user.is_superuser:
         return AgentSystem.objects.all()
-    return AgentSystem.objects.filter(owner=user)
+    return AgentSystem.objects.filter(
+        Q(owner=user) | Q(collaborators__user=user)
+    ).distinct()
 
 
 class AgentDefinitionListCreateView(generics.ListCreateAPIView):
@@ -2068,3 +2146,387 @@ class AgentSpecDocumentView(APIView):
             'created': created,
             'message': f"Spec {'created' if created else 'updated'} for {agent.name}",
         })
+
+
+# =============================================================================
+# Collaborator Management Views
+# =============================================================================
+
+from django_agent_runtime.models import (
+    AgentCollaborator,
+    SystemCollaborator,
+    CollaboratorRole,
+)
+from django_agent_studio.api.serializers import (
+    AgentCollaboratorSerializer,
+    SystemCollaboratorSerializer,
+    AddCollaboratorSerializer,
+    UpdateCollaboratorRoleSerializer,
+)
+
+
+class AgentCollaboratorListCreateView(generics.ListCreateAPIView):
+    """
+    List and add collaborators to an agent.
+
+    GET /api/agents/{id}/collaborators/
+    POST /api/agents/{id}/collaborators/
+
+    Only owners and admins can manage collaborators.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get_serializer_class(self):
+        if self.request.method == 'POST':
+            return AddCollaboratorSerializer
+        return AgentCollaboratorSerializer
+
+    def get_queryset(self):
+        agent = get_agent_for_user(self.request.user, self.kwargs['agent_id'])
+        return agent.collaborators.select_related('user', 'added_by').all()
+
+    def create(self, request, *args, **kwargs):
+        agent = get_agent_for_user(request.user, self.kwargs['agent_id'])
+
+        # Check if user can manage collaborators (owner or admin)
+        if not self._can_admin(request.user, agent):
+            return Response(
+                {'error': 'Only owners and admins can manage collaborators'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        # Find user by email or username
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        identifier = serializer.validated_data['email']
+
+        # Try to find user by email first, then username
+        user = None
+        user_fields = [f.name for f in User._meta.get_fields()]
+
+        if 'email' in user_fields:
+            user = User.objects.filter(email=identifier).first()
+        if not user and 'username' in user_fields:
+            user = User.objects.filter(username=identifier).first()
+
+        if not user:
+            return Response(
+                {'error': f"User '{identifier}' not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # Can't add owner as collaborator
+        if user == agent.owner:
+            return Response(
+                {'error': 'Cannot add the owner as a collaborator'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Check if already a collaborator
+        if AgentCollaborator.objects.filter(agent=agent, user=user).exists():
+            return Response(
+                {'error': 'User is already a collaborator on this agent'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Create collaborator
+        collaborator = AgentCollaborator.objects.create(
+            agent=agent,
+            user=user,
+            role=serializer.validated_data.get('role', CollaboratorRole.VIEWER),
+            added_by=request.user,
+        )
+
+        return Response(
+            AgentCollaboratorSerializer(collaborator).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+    def _can_admin(self, user, agent):
+        """Check if user can manage collaborators."""
+        if user.is_superuser or agent.owner == user:
+            return True
+        try:
+            collab = AgentCollaborator.objects.get(agent=agent, user=user)
+            return collab.can_admin
+        except AgentCollaborator.DoesNotExist:
+            return False
+
+
+class AgentCollaboratorDetailView(generics.RetrieveUpdateDestroyAPIView):
+    """
+    Retrieve, update, or delete an agent collaborator.
+
+    GET/PUT/PATCH/DELETE /api/agents/{id}/collaborators/{collaborator_id}/
+
+    Only owners and admins can manage collaborators.
+    """
+
+    permission_classes = [IsAuthenticated]
+    serializer_class = AgentCollaboratorSerializer
+
+    def get_queryset(self):
+        agent = get_agent_for_user(self.request.user, self.kwargs['agent_id'])
+        return agent.collaborators.select_related('user', 'added_by').all()
+
+    def update(self, request, *args, **kwargs):
+        agent = get_agent_for_user(request.user, self.kwargs['agent_id'])
+
+        if not self._can_admin(request.user, agent):
+            return Response(
+                {'error': 'Only owners and admins can manage collaborators'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        # Use the role update serializer for validation
+        role_serializer = UpdateCollaboratorRoleSerializer(data=request.data)
+        role_serializer.is_valid(raise_exception=True)
+
+        collaborator = self.get_object()
+        collaborator.role = role_serializer.validated_data['role']
+        collaborator.save()
+
+        return Response(AgentCollaboratorSerializer(collaborator).data)
+
+    def destroy(self, request, *args, **kwargs):
+        agent = get_agent_for_user(request.user, self.kwargs['agent_id'])
+
+        if not self._can_admin(request.user, agent):
+            return Response(
+                {'error': 'Only owners and admins can manage collaborators'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        return super().destroy(request, *args, **kwargs)
+
+    def _can_admin(self, user, agent):
+        """Check if user can manage collaborators."""
+        if user.is_superuser or agent.owner == user:
+            return True
+        try:
+            collab = AgentCollaborator.objects.get(agent=agent, user=user)
+            return collab.can_admin
+        except AgentCollaborator.DoesNotExist:
+            return False
+
+
+class SystemCollaboratorListCreateView(generics.ListCreateAPIView):
+    """
+    List and add collaborators to a system.
+
+    GET /api/systems/{id}/collaborators/
+    POST /api/systems/{id}/collaborators/
+
+    Only owners and admins can manage collaborators.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get_serializer_class(self):
+        if self.request.method == 'POST':
+            return AddCollaboratorSerializer
+        return SystemCollaboratorSerializer
+
+    def get_queryset(self):
+        system = get_system_for_user(self.request.user, self.kwargs['system_id'])
+        return system.collaborators.select_related('user', 'added_by').all()
+
+    def create(self, request, *args, **kwargs):
+        system = get_system_for_user(request.user, self.kwargs['system_id'])
+
+        # Check if user can manage collaborators (owner or admin)
+        if not self._can_admin(request.user, system):
+            return Response(
+                {'error': 'Only owners and admins can manage collaborators'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        # Find user by email or username
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        identifier = serializer.validated_data['email']
+
+        # Try to find user by email first, then username
+        user = None
+        user_fields = [f.name for f in User._meta.get_fields()]
+
+        if 'email' in user_fields:
+            user = User.objects.filter(email=identifier).first()
+        if not user and 'username' in user_fields:
+            user = User.objects.filter(username=identifier).first()
+
+        if not user:
+            return Response(
+                {'error': f"User '{identifier}' not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # Can't add owner as collaborator
+        if user == system.owner:
+            return Response(
+                {'error': 'Cannot add the owner as a collaborator'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Check if already a collaborator
+        if SystemCollaborator.objects.filter(system=system, user=user).exists():
+            return Response(
+                {'error': 'User is already a collaborator on this system'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Create collaborator
+        collaborator = SystemCollaborator.objects.create(
+            system=system,
+            user=user,
+            role=serializer.validated_data.get('role', CollaboratorRole.VIEWER),
+            added_by=request.user,
+        )
+
+        return Response(
+            SystemCollaboratorSerializer(collaborator).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+    def _can_admin(self, user, system):
+        """Check if user can manage collaborators."""
+        if user.is_superuser or system.owner == user:
+            return True
+        try:
+            collab = SystemCollaborator.objects.get(system=system, user=user)
+            return collab.can_admin
+        except SystemCollaborator.DoesNotExist:
+            return False
+
+
+class SystemCollaboratorDetailView(generics.RetrieveUpdateDestroyAPIView):
+    """
+    Retrieve, update, or delete a system collaborator.
+
+    GET/PUT/PATCH/DELETE /api/systems/{id}/collaborators/{collaborator_id}/
+
+    Only owners and admins can manage collaborators.
+    """
+
+    permission_classes = [IsAuthenticated]
+    serializer_class = SystemCollaboratorSerializer
+
+    def get_queryset(self):
+        system = get_system_for_user(self.request.user, self.kwargs['system_id'])
+        return system.collaborators.select_related('user', 'added_by').all()
+
+    def update(self, request, *args, **kwargs):
+        system = get_system_for_user(request.user, self.kwargs['system_id'])
+
+        if not self._can_admin(request.user, system):
+            return Response(
+                {'error': 'Only owners and admins can manage collaborators'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        # Use the role update serializer for validation
+        role_serializer = UpdateCollaboratorRoleSerializer(data=request.data)
+        role_serializer.is_valid(raise_exception=True)
+
+        collaborator = self.get_object()
+        collaborator.role = role_serializer.validated_data['role']
+        collaborator.save()
+
+        return Response(SystemCollaboratorSerializer(collaborator).data)
+
+    def destroy(self, request, *args, **kwargs):
+        system = get_system_for_user(request.user, self.kwargs['system_id'])
+
+        if not self._can_admin(request.user, system):
+            return Response(
+                {'error': 'Only owners and admins can manage collaborators'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        return super().destroy(request, *args, **kwargs)
+
+    def _can_admin(self, user, system):
+        """Check if user can manage collaborators."""
+        if user.is_superuser or system.owner == user:
+            return True
+        try:
+            collab = SystemCollaborator.objects.get(system=system, user=user)
+            return collab.can_admin
+        except SystemCollaborator.DoesNotExist:
+            return False
+
+
+class UserSearchView(APIView):
+    """
+    Search for users by email, username, or name for collaborator autocomplete.
+
+    GET /api/users/search/?q=<query>
+
+    Returns up to 10 matching users.
+    Handles both email-based and username-based User models.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from django.contrib.auth import get_user_model
+        from django.db.models import Q
+
+        User = get_user_model()
+        query = request.query_params.get('q', '').strip()
+
+        if len(query) < 2:
+            return Response([])
+
+        # Build query filters based on available fields
+        # Check which fields exist on the User model
+        user_fields = [f.name for f in User._meta.get_fields()]
+
+        filters = Q()
+        if 'email' in user_fields:
+            filters |= Q(email__icontains=query)
+        if 'username' in user_fields:
+            filters |= Q(username__icontains=query)
+        if 'first_name' in user_fields:
+            filters |= Q(first_name__icontains=query)
+        if 'last_name' in user_fields:
+            filters |= Q(last_name__icontains=query)
+        if 'full_name' in user_fields:
+            filters |= Q(full_name__icontains=query)
+
+        users = User.objects.filter(filters).exclude(
+            id=request.user.id  # Exclude current user
+        )[:10]
+
+        results = []
+        for user in users:
+            # Get identifier (email or username)
+            identifier = getattr(user, 'email', None) or getattr(user, 'username', None) or str(user)
+
+            # Get display name
+            full_name = getattr(user, 'full_name', None) or ''
+            first_name = getattr(user, 'first_name', None) or ''
+            last_name = getattr(user, 'last_name', None) or ''
+            name = full_name or f"{first_name} {last_name}".strip() or identifier
+
+            # Build display string
+            if name != identifier:
+                display = f"{name} ({identifier})"
+            else:
+                display = identifier
+
+            results.append({
+                'id': str(user.id),
+                'email': identifier,  # Keep as 'email' for backward compatibility
+                'name': name,
+                'display': display,
+            })
+
+        return Response(results)

@@ -59,11 +59,16 @@
             </div>
         </div>
         <div class="flex items-center space-x-3">
-            <a href="{% url 'agent_studio:agent_edit' agent.id %}" 
+            <a href="{% url 'agent_studio:agent_collaborators' agent.id %}"
+               class="text-gray-600 hover:text-gray-800 px-3 py-1.5 border border-gray-300 rounded-lg text-sm"
+               title="Manage collaborators">
+                <i class="pi pi-users"></i>
+            </a>
+            <a href="{% url 'agent_studio:agent_edit' agent.id %}"
                class="text-gray-600 hover:text-gray-800 px-3 py-1.5 border border-gray-300 rounded-lg text-sm">
                 ← Back to Editor
             </a>
-            <button @click="clearChat" 
+            <button @click="clearChat"
                     class="text-gray-600 hover:text-gray-800 px-3 py-1.5 border border-gray-300 rounded-lg text-sm">
                 Clear Chat
             </button>

@@ -12,40 +12,49 @@
         </div>
         
         <!-- Quick Actions -->
-        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-            <a href="{% url 'agent_studio:system_list' %}"
-               class="bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg p-6 transition-colors">
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
+            <a href="{% url 'agent_studio:system_create' %}"
+               class="bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg p-5 transition-colors">
                 <div class="flex items-center space-x-3 mb-2">
                     <span class="text-2xl">🔗</span>
-                    <span class="text-lg font-semibold">My Systems</span>
+                    <span class="text-lg font-semibold">New System</span>
                 </div>
-                <p class="text-indigo-100 text-sm">Multi-agent systems that work together</p>
+                <p class="text-indigo-100 text-sm">Create a multi-agent system</p>
             </a>
 
             <a href="{% url 'agent_studio:agent_create' %}"
-               class="bg-primary-600 hover:bg-primary-700 text-white rounded-lg p-6 transition-colors">
+               class="bg-primary-600 hover:bg-primary-700 text-white rounded-lg p-5 transition-colors">
                 <div class="flex items-center space-x-3 mb-2">
                     <span class="text-2xl">✨</span>
-                    <span class="text-lg font-semibold">Create New Agent</span>
+                    <span class="text-lg font-semibold">New Agent</span>
                 </div>
-                <p class="text-primary-100 text-sm">Start building a custom AI agent from scratch</p>
+                <p class="text-primary-100 text-sm">Build a custom AI agent</p>
+            </a>
+
+            <a href="{% url 'agent_studio:system_list' %}"
+               class="bg-white hover:bg-gray-50 border border-gray-200 rounded-lg p-5 transition-colors">
+                <div class="flex items-center space-x-3 mb-2">
+                    <span class="text-2xl">🔗</span>
+                    <span class="text-lg font-semibold text-gray-800">My Systems</span>
+                </div>
+                <p class="text-gray-600 text-sm">View multi-agent systems</p>
             </a>
 
             <a href="{% url 'agent_studio:agent_list' %}"
-               class="bg-white hover:bg-gray-50 border border-gray-200 rounded-lg p-6 transition-colors">
+               class="bg-white hover:bg-gray-50 border border-gray-200 rounded-lg p-5 transition-colors">
                 <div class="flex items-center space-x-3 mb-2">
                     <span class="text-2xl">📋</span>
                     <span class="text-lg font-semibold text-gray-800">My Agents</span>
                 </div>
-                <p class="text-gray-600 text-sm">View and manage your existing agents</p>
+                <p class="text-gray-600 text-sm">View and manage agents</p>
             </a>
 
-            <div class="bg-white hover:bg-gray-50 border border-gray-200 rounded-lg p-6 transition-colors cursor-pointer">
+            <div class="bg-white hover:bg-gray-50 border border-gray-200 rounded-lg p-5 transition-colors cursor-pointer opacity-60">
                 <div class="flex items-center space-x-3 mb-2">
                     <span class="text-2xl">📚</span>
                     <span class="text-lg font-semibold text-gray-800">Templates</span>
                 </div>
-                <p class="text-gray-600 text-sm">Start from a pre-built template</p>
+                <p class="text-gray-600 text-sm">Coming soon</p>
             </div>
         </div>
         

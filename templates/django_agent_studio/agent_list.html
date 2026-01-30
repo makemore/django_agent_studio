@@ -58,11 +58,18 @@
                     </div>
                 </div>
                 <div class="border-t border-gray-100 px-4 py-3 bg-gray-50 flex items-center justify-between">
-                    <a href="{% url 'agent_studio:agent_edit' agent.id %}" 
-                       class="text-primary-600 hover:text-primary-700 text-sm font-medium">
-                        Edit
-                    </a>
-                    <a href="{% url 'agent_studio:agent_test' agent.id %}" 
+                    <div class="flex items-center space-x-3">
+                        <a href="{% url 'agent_studio:agent_edit' agent.id %}"
+                           class="text-primary-600 hover:text-primary-700 text-sm font-medium">
+                            Edit
+                        </a>
+                        <a href="{% url 'agent_studio:agent_collaborators' agent.id %}"
+                           class="text-gray-500 hover:text-gray-700 text-sm"
+                           title="Manage collaborators">
+                            <i class="pi pi-users"></i>
+                        </a>
+                    </div>
+                    <a href="{% url 'agent_studio:agent_test' agent.id %}"
                        class="text-gray-600 hover:text-gray-700 text-sm">
                         Test →
                     </a>

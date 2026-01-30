@@ -300,4 +300,39 @@ urlpatterns = [
         views.AgentSpecDocumentView.as_view(),
         name="agent_spec_document",
     ),
+
+    # ==========================================================================
+    # Collaborator Management Endpoints
+    # ==========================================================================
+
+    # Agent collaborators
+    path(
+        "agents/<uuid:agent_id>/collaborators/",
+        views.AgentCollaboratorListCreateView.as_view(),
+        name="agent_collaborator_list",
+    ),
+    path(
+        "agents/<uuid:agent_id>/collaborators/<uuid:pk>/",
+        views.AgentCollaboratorDetailView.as_view(),
+        name="agent_collaborator_detail",
+    ),
+
+    # System collaborators
+    path(
+        "systems/<uuid:system_id>/collaborators/",
+        views.SystemCollaboratorListCreateView.as_view(),
+        name="system_collaborator_list",
+    ),
+    path(
+        "systems/<uuid:system_id>/collaborators/<uuid:pk>/",
+        views.SystemCollaboratorDetailView.as_view(),
+        name="system_collaborator_detail",
+    ),
+
+    # User search for collaborator autocomplete
+    path(
+        "users/search/",
+        views.UserSearchView.as_view(),
+        name="user_search",
+    ),
 ]

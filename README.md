@@ -6,6 +6,7 @@ A visual agent builder and management interface for Django applications. Create,
 
 | Version | Date | Changes |
 |---------|------|---------|
+| **0.3.2** | 2026-01-30 | **Multi-User Access Control** - Collaborator management UI, user search autocomplete, supports both email and username-based User models, system creation from homepage, permission inheritance display |
 | **0.3.1** | 2026-01-30 | **Bug Fixes** - Fixed duplicate message emit in dynamic agents, fixed escapejs encoding in templates, added 800px max-width constraint to system test view |
 | **0.3.0** | 2026-01-29 | **System Listing & Navigation** - Browse and test multi-agent systems from homepage, fixed URL routing for My Systems/My Agents links, system creation now supports optional entry agent |
 | **0.2.0** | 2026-01-28 | **Multi-Agent Systems** - System management UI, shared memory configuration, memory privacy controls, builder tools for managing agent systems |

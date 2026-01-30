@@ -17,6 +17,10 @@ from django_agent_runtime.models import (
     AgentSystemMember,
     AgentSystemVersion,
     AgentSystemSnapshot,
+    # Collaborator models
+    CollaboratorRole,
+    AgentCollaborator,
+    SystemCollaborator,
 )
 
 
@@ -620,4 +624,139 @@ class PublishVersionSerializer(serializers.Serializer):
     make_active = serializers.BooleanField(
         default=False,
         help_text="Whether to make this the active version immediately",
+    )
+
+
+# =============================================================================
+# Collaborator Serializers for Multi-User Access Control
+# =============================================================================
+
+
+class AgentCollaboratorSerializer(serializers.ModelSerializer):
+    """Serializer for AgentCollaborator."""
+
+    user_email = serializers.SerializerMethodField()
+    user_name = serializers.SerializerMethodField()
+    added_by_email = serializers.SerializerMethodField()
+    role_display = serializers.CharField(source='get_role_display', read_only=True)
+    can_view = serializers.BooleanField(read_only=True)
+    can_edit = serializers.BooleanField(read_only=True)
+    can_admin = serializers.BooleanField(read_only=True)
+
+    class Meta:
+        model = AgentCollaborator
+        fields = [
+            "id",
+            "agent",
+            "user",
+            "user_email",
+            "user_name",
+            "role",
+            "role_display",
+            "can_view",
+            "can_edit",
+            "can_admin",
+            "added_by",
+            "added_by_email",
+            "added_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "added_by", "added_at", "updated_at"]
+
+    def get_user_email(self, obj):
+        """Return email or username as identifier."""
+        if obj.user:
+            return obj.user.email or getattr(obj.user, 'username', None) or str(obj.user)
+        return None
+
+    def get_user_name(self, obj):
+        """Return full name, or fall back to email/username."""
+        if obj.user:
+            if hasattr(obj.user, 'get_full_name'):
+                name = obj.user.get_full_name()
+                if name:
+                    return name
+            return obj.user.email or getattr(obj.user, 'username', None) or str(obj.user)
+        return None
+
+    def get_added_by_email(self, obj):
+        """Return added_by email or username."""
+        if obj.added_by:
+            return obj.added_by.email or getattr(obj.added_by, 'username', None) or str(obj.added_by)
+        return None
+
+
+class SystemCollaboratorSerializer(serializers.ModelSerializer):
+    """Serializer for SystemCollaborator."""
+
+    user_email = serializers.SerializerMethodField()
+    user_name = serializers.SerializerMethodField()
+    added_by_email = serializers.SerializerMethodField()
+    role_display = serializers.CharField(source='get_role_display', read_only=True)
+    can_view = serializers.BooleanField(read_only=True)
+    can_edit = serializers.BooleanField(read_only=True)
+    can_admin = serializers.BooleanField(read_only=True)
+
+    class Meta:
+        model = SystemCollaborator
+        fields = [
+            "id",
+            "system",
+            "user",
+            "user_email",
+            "user_name",
+            "role",
+            "role_display",
+            "can_view",
+            "can_edit",
+            "can_admin",
+            "added_by",
+            "added_by_email",
+            "added_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "added_by", "added_at", "updated_at"]
+
+    def get_user_email(self, obj):
+        """Return email or username as identifier."""
+        if obj.user:
+            return obj.user.email or getattr(obj.user, 'username', None) or str(obj.user)
+        return None
+
+    def get_user_name(self, obj):
+        """Return full name, or fall back to email/username."""
+        if obj.user:
+            if hasattr(obj.user, 'get_full_name'):
+                name = obj.user.get_full_name()
+                if name:
+                    return name
+            return obj.user.email or getattr(obj.user, 'username', None) or str(obj.user)
+        return None
+
+    def get_added_by_email(self, obj):
+        """Return added_by email or username."""
+        if obj.added_by:
+            return obj.added_by.email or getattr(obj.added_by, 'username', None) or str(obj.added_by)
+        return None
+
+
+class AddCollaboratorSerializer(serializers.Serializer):
+    """Serializer for adding a collaborator by email or username."""
+
+    email = serializers.CharField(
+        help_text="Email or username of the user to add as collaborator"
+    )
+    role = serializers.ChoiceField(
+        choices=CollaboratorRole.choices,
+        default=CollaboratorRole.VIEWER,
+        help_text="Role to grant: viewer, editor, or admin",
+    )
+
+
+class UpdateCollaboratorRoleSerializer(serializers.Serializer):
+    """Serializer for updating a collaborator's role."""
+
+    role = serializers.ChoiceField(
+        choices=CollaboratorRole.choices,
+        help_text="New role: viewer, editor, or admin",
     )
