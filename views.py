@@ -2,7 +2,10 @@
 Views for django_agent_studio.
 """
 
+from django.contrib.auth import logout
 from django.db.models import Q
+from django.shortcuts import redirect
+from django.views import View
 from django.views.generic import TemplateView, ListView
 from django.contrib.auth.mixins import LoginRequiredMixin
 
@@ -451,4 +454,12 @@ class SystemCollaboratorsView(LoginRequiredMixin, SystemAccessMixin, TemplateVie
         ]
 
         return context
+
+
+class LogoutView(View):
+    """Simple logout view that works with any auth backend."""
+
+    def post(self, request):
+        logout(request)
+        return redirect('/')
 

@@ -12,6 +12,7 @@ app_name = "agent_studio"
 urlpatterns = [
     # Main studio interface
     path("", views.StudioHomeView.as_view(), name="home"),
+    path("logout/", views.LogoutView.as_view(), name="logout"),
 
     # Systems (multi-agent systems)
     path("systems/", views.SystemListView.as_view(), name="system_list"),

@@ -19,7 +19,7 @@
         display: flex;
         justify-content: center;
     }
-    
+
     #fullscreen-chat-container .cw-container {
         position: relative !important;
         width: 100% !important;
@@ -28,11 +28,11 @@
         border-radius: 0 !important;
         box-shadow: 0 0 20px rgba(0,0,0,0.1) !important;
     }
-    
+
     #fullscreen-chat-container .cw-toggle-btn {
         display: none !important;
     }
-    
+
     #fullscreen-chat-container .cw-widget {
         position: relative !important;
         width: 100% !important;
@@ -40,6 +40,14 @@
         max-height: none !important;
         border-radius: 0 !important;
         display: flex !important;
+        flex-direction: column !important;
+        overflow: hidden !important;
+    }
+
+    #fullscreen-chat-container .cw-messages {
+        flex: 1 !important;
+        min-height: 0 !important;
+        overflow-y: auto !important;
     }
 </style>
 {% endblock %}
@@ -77,7 +85,7 @@
     </div>
     
     <!-- Full Screen Chat -->
-    <div class="flex-1 relative bg-gray-100 flex justify-center">
+    <div class="flex-1 min-h-0 relative bg-gray-100 flex justify-center">
         <div id="fullscreen-chat-container" class="relative w-full max-w-[800px] h-full"></div>
     </div>
 </div>
