@@ -15,17 +15,18 @@
 
 {% block extra_head %}
 <style>
+    #fullscreen-chat-container {
+        display: flex;
+        justify-content: center;
+    }
+    
     #fullscreen-chat-container .cw-container {
-        position: absolute !important;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
+        position: relative !important;
         width: 100% !important;
         height: 100% !important;
         max-height: none !important;
         border-radius: 0 !important;
-        box-shadow: none !important;
+        box-shadow: 0 0 20px rgba(0,0,0,0.1) !important;
     }
     
     #fullscreen-chat-container .cw-toggle-btn {
@@ -33,11 +34,7 @@
     }
     
     #fullscreen-chat-container .cw-widget {
-        position: absolute !important;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
+        position: relative !important;
         width: 100% !important;
         height: 100% !important;
         max-height: none !important;
@@ -75,8 +72,8 @@
     </div>
     
     <!-- Full Screen Chat -->
-    <div class="flex-1 relative bg-gray-100">
-        <div id="fullscreen-chat-container" class="absolute inset-0"></div>
+    <div class="flex-1 relative bg-gray-100 flex justify-center">
+        <div id="fullscreen-chat-container" class="relative w-full max-w-[800px] h-full"></div>
     </div>
 </div>
 {% endblock %}
@@ -86,7 +83,7 @@
 const { createApp } = Vue;
 
 // Use the entry agent's slug for the chat
-const agentSlug = "{{ agent.slug }}";
+const agentSlug = "{{ agent.slug|escapejs }}";
 const backendUrl = window.location.origin;
 
 function initChat() {
@@ -98,7 +95,7 @@ function initChat() {
         containerId: 'fullscreen-chat-container',
         backendUrl: backendUrl,
         agentKey: agentSlug,
-        title: '{{ system.name }}',
+        title: '{{ system.name|escapejs }}',
         primaryColor: '#3b82f6',
         showClearButton: true,
         showDebugButton: true,

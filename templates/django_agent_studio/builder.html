@@ -25,9 +25,9 @@
     <script>
         // Configuration passed from Django
         window.STUDIO_CONFIG = {
-            agentId: {% if agent %}"{{ agent.id }}"{% else %}null{% endif %},
+            agentId: {% if agent %}"{{ agent.id|escapejs }}"{% else %}null{% endif %},
             csrfToken: "{{ csrf_token }}",
-            builderAgentKey: "{{ builder_agent_key }}",
+            builderAgentKey: "{{ builder_agent_key|escapejs }}",
         };
     </script>
 

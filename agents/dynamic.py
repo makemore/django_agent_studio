@@ -266,9 +266,8 @@ class DynamicAgentRuntime(AgentRuntime):
                 **model_settings,
             )
 
-            # Emit the final assistant message
-            if result.final_content:
-                await ctx.emit(EventType.ASSISTANT_MESSAGE, {"content": result.final_content})
+            # Note: run_agentic_loop already emits ASSISTANT_MESSAGE events,
+            # so we don't emit here to avoid duplicate messages in the UI.
 
             return RunResult(
                 final_output={"response": result.final_content},
