@@ -1,15 +1,15 @@
 {% extends "django_agent_studio/base.html" %}
 
-{% block title %}Test {{ agent.name }} - Agent Studio{% endblock %}
+{% block title %}Test {{ agent.name }} - {{ studio_app_name }}{% endblock %}
 
 {% block breadcrumbs %}
 <nav class="flex items-center space-x-2 ml-4 text-sm">
-    <span class="text-gray-400">/</span>
-    <a href="{% url 'agent_studio:agent_list' %}" class="text-gray-500 hover:text-gray-700">My Agents</a>
-    <span class="text-gray-400">/</span>
-    <a href="{% url 'agent_studio:agent_edit' agent.id %}" class="text-gray-500 hover:text-gray-700">{{ agent.name }}</a>
-    <span class="text-gray-400">/</span>
-    <span class="text-gray-600">Test</span>
+    <span class="text-white/40">/</span>
+    <a href="{% url 'agent_studio:agent_list' %}" class="text-white/60 hover:text-white/90 transition-colors">My Agents</a>
+    <span class="text-white/40">/</span>
+    <a href="{% url 'agent_studio:agent_edit' agent.id %}" class="text-white/60 hover:text-white/90 transition-colors">{{ agent.name }}</a>
+    <span class="text-white/40">/</span>
+    <span class="text-white/70">Test</span>
 </nav>
 {% endblock %}
 
@@ -52,39 +52,45 @@
         min-height: 0 !important;
         overflow-y: auto !important;
     }
+    
+    #fullscreen-chat-container .cw-header {
+        background: {{ studio_colors.primary }} !important;
+    }
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="h-full flex flex-col">
     <!-- Agent Info Bar -->
-    <div class="px-4 py-3 bg-white border-b border-gray-200 flex items-center justify-between">
+    <div class="px-5 py-3 bg-white border-b border-slate-200 flex items-center justify-between">
         <div class="flex items-center space-x-4">
-            <span class="text-2xl">{{ agent.icon|default:"🤖" }}</span>
+            <div class="w-10 h-10 bg-cyan/10 rounded-lg flex items-center justify-center">
+                <span class="text-xl">{{ agent.icon|default:"🤖" }}</span>
+            </div>
             <div>
-                <h1 class="font-semibold text-gray-800">{{ agent.name }}</h1>
-                <p class="text-sm text-gray-500">{{ agent.description|default:"No description"|truncatechars:100 }}</p>
+                <h1 class="font-semibold text-navy">{{ agent.name }}</h1>
+                <p class="text-sm text-slate-500">{{ agent.description|default:"No description"|truncatechars:100 }}</p>
             </div>
         </div>
         <div class="flex items-center space-x-3">
             <a href="{% url 'agent_studio:agent_collaborators' agent.id %}"
-               class="text-gray-600 hover:text-gray-800 px-3 py-1.5 border border-gray-300 rounded-lg text-sm"
+               class="text-slate-500 hover:text-navy px-3 py-1.5 border border-slate-200 rounded-lg text-sm transition-colors hover:border-cyan"
                title="Manage collaborators">
                 <i class="pi pi-users"></i>
             </a>
             <a href="{% url 'agent_studio:agent_edit' agent.id %}"
-               class="text-gray-600 hover:text-gray-800 px-3 py-1.5 border border-gray-300 rounded-lg text-sm">
+               class="text-slate-500 hover:text-navy px-3 py-1.5 border border-slate-200 rounded-lg text-sm transition-colors hover:border-cyan">
                 ← Back to Editor
             </a>
             <button @click="clearChat"
-                    class="text-gray-600 hover:text-gray-800 px-3 py-1.5 border border-gray-300 rounded-lg text-sm">
+                    class="text-white bg-navy hover:bg-navy-light px-4 py-1.5 rounded-lg text-sm font-medium transition-all hover:shadow-md">
                 Clear Chat
             </button>
         </div>
     </div>
     
     <!-- Full Screen Chat -->
-    <div class="flex-1 min-h-0 relative bg-gray-100">
+    <div class="flex-1 min-h-0 relative bg-gradient-to-br from-slate-50 to-slate-100">
         <div id="fullscreen-chat-container" class="absolute inset-0"></div>
     </div>
 </div>
@@ -107,7 +113,7 @@ function initChat() {
         backendUrl: backendUrl,
         agentKey: agentSlug,
         title: '{{ agent.name|escapejs }}',
-        primaryColor: '#3b82f6',
+        primaryColor: '{{ studio_chat_primary_color }}',
         showClearButton: true,
         showDebugButton: true,
         showExpandButton: false,
@@ -136,4 +142,3 @@ createApp({
 }).use(primevue.config.default).mount('#app');
 </script>
 {% endblock %}
-

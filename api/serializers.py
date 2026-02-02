@@ -503,8 +503,8 @@ class AgentSystemVersionSerializer(serializers.ModelSerializer):
 class AgentSystemListSerializer(serializers.ModelSerializer):
     """Serializer for listing AgentSystems."""
 
-    entry_agent_name = serializers.CharField(source='entry_agent.name', read_only=True)
-    entry_agent_slug = serializers.CharField(source='entry_agent.slug', read_only=True)
+    entry_agent = serializers.SerializerMethodField()
+    members = AgentSystemMemberSerializer(many=True, read_only=True)
     member_count = serializers.SerializerMethodField()
     active_version = serializers.SerializerMethodField()
 
@@ -516,8 +516,7 @@ class AgentSystemListSerializer(serializers.ModelSerializer):
             "name",
             "description",
             "entry_agent",
-            "entry_agent_name",
-            "entry_agent_slug",
+            "members",
             "is_active",
             "member_count",
             "active_version",
@@ -525,6 +524,16 @@ class AgentSystemListSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
         read_only_fields = ["id", "created_at", "updated_at"]
+
+    def get_entry_agent(self, obj):
+        if obj.entry_agent:
+            return {
+                "id": str(obj.entry_agent.id),
+                "name": obj.entry_agent.name,
+                "slug": obj.entry_agent.slug,
+                "icon": obj.entry_agent.icon,
+            }
+        return None
 
     def get_member_count(self, obj):
         return obj.members.count()
@@ -539,8 +548,6 @@ class AgentSystemListSerializer(serializers.ModelSerializer):
 class AgentSystemDetailSerializer(serializers.ModelSerializer):
     """Serializer for AgentSystem detail view."""
 
-    entry_agent_name = serializers.CharField(source='entry_agent.name', read_only=True)
-    entry_agent_slug = serializers.CharField(source='entry_agent.slug', read_only=True)
     members = AgentSystemMemberSerializer(many=True, read_only=True)
     versions = AgentSystemVersionSerializer(many=True, read_only=True)
     dependency_graph = serializers.SerializerMethodField()
@@ -553,8 +560,6 @@ class AgentSystemDetailSerializer(serializers.ModelSerializer):
             "name",
             "description",
             "entry_agent",
-            "entry_agent_name",
-            "entry_agent_slug",
             "is_active",
             "members",
             "versions",
@@ -566,6 +571,20 @@ class AgentSystemDetailSerializer(serializers.ModelSerializer):
 
     def get_dependency_graph(self, obj):
         return obj.get_dependency_graph()
+
+    def to_representation(self, instance):
+        """Return entry_agent as an object for reading."""
+        data = super().to_representation(instance)
+        if instance.entry_agent:
+            data['entry_agent'] = {
+                "id": str(instance.entry_agent.id),
+                "name": instance.entry_agent.name,
+                "slug": instance.entry_agent.slug,
+                "icon": instance.entry_agent.icon,
+            }
+        else:
+            data['entry_agent'] = None
+        return data
 
 
 class AgentSystemCreateSerializer(serializers.Serializer):

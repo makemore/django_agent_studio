@@ -1,6 +1,6 @@
 import { ref } from 'vue'
 import type { AgentSystem, SystemMember } from '@/types'
-import { apiGet, apiPost, apiDelete } from './useApi'
+import { apiGet, apiPost, apiPatch, apiDelete } from './useApi'
 
 const systems = ref<AgentSystem[]>([])
 const selectedSystemId = ref('')
@@ -30,6 +30,11 @@ export function useSystems() {
     await loadSystems()
   }
 
+  async function updateSystem(systemId: string, data: { name?: string; description?: string; entry_agent?: string }) {
+    await apiPatch(`/studio/api/systems/${systemId}/`, data)
+    await loadSystems()
+  }
+
   async function deleteSystem(systemId: string) {
     await apiDelete(`/studio/api/systems/${systemId}/`)
     if (selectedSystemId.value === systemId) {
@@ -44,7 +49,7 @@ export function useSystems() {
         `/studio/api/systems/${systemId}/members/`
       )
       const members = Array.isArray(data) ? data : (data.results || [])
-      
+
       const idx = systems.value.findIndex(s => s.id === systemId)
       if (idx !== -1) {
         systems.value[idx] = { ...systems.value[idx], members }
@@ -64,8 +69,14 @@ export function useSystems() {
     await loadSystemMembers(systemId)
   }
 
-  async function publishSystem(systemId: string) {
-    await apiPost(`/studio/api/systems/${systemId}/publish/`)
+  async function updateMember(systemId: string, memberId: string, data: { role?: string }) {
+    await apiPatch(`/studio/api/systems/${systemId}/members/${memberId}/`, data)
+    await loadSystemMembers(systemId)
+  }
+
+  async function publishSystem(systemId: string, version?: string) {
+    const payload = version ? { version } : {}
+    await apiPost(`/studio/api/systems/${systemId}/publish/`, payload)
     await loadSystems()
   }
 
@@ -98,10 +109,12 @@ export function useSystems() {
     // Methods
     loadSystems,
     createSystem,
+    updateSystem,
     deleteSystem,
     loadSystemMembers,
     addMember,
     removeMember,
+    updateMember,
     publishSystem,
     openModal,
     closeModal,

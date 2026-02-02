@@ -1,23 +1,24 @@
 {% extends "django_agent_studio/base.html" %}
 
-{% block title %}My Systems - Agent Studio{% endblock %}
+{% block title %}My Systems - {{ studio_app_name }}{% endblock %}
 
 {% block breadcrumbs %}
 <nav class="flex items-center space-x-2 ml-4 text-sm">
-    <span class="text-gray-400">/</span>
-    <span class="text-gray-600">My Systems</span>
+    <span class="text-white/40">/</span>
+    <span class="text-white/70">My Systems</span>
 </nav>
 {% endblock %}
 
 {% block content %}
-<div class="h-full p-6 overflow-auto">
+<div class="h-full p-6 overflow-auto bg-gradient-to-br from-slate-50 to-slate-100">
     <div class="max-w-6xl mx-auto">
         <!-- Header -->
         <div class="flex items-center justify-between mb-6">
-            <h1 class="text-2xl font-bold text-gray-900">My Systems</h1>
+            <h1 class="text-2xl font-bold text-navy">My Systems</h1>
             <a href="{% url 'agent_studio:system_create' %}"
-               class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium text-sm">
-                + New System
+               class="bg-navy hover:bg-navy-light text-white px-4 py-2 rounded-xl flex items-center space-x-2 transition-all hover:shadow-lg hover:-translate-y-0.5 font-medium">
+                <i class="pi pi-plus"></i>
+                <span>New System</span>
             </a>
         </div>
         
@@ -25,49 +26,54 @@
         <!-- System Grid -->
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {% for system in systems %}
-            <div class="bg-white border border-gray-200 rounded-lg overflow-hidden hover:border-primary-300 hover:shadow-md transition-all">
-                <div class="p-4">
+            <div class="bg-white border border-slate-200 rounded-xl overflow-hidden hover:border-cyan hover:shadow-md transition-all group">
+                <div class="p-5">
                     <div class="flex items-center justify-between mb-3">
                         <div class="flex items-center space-x-3">
-                            <span class="text-2xl">🔗</span>
+                            <div class="w-10 h-10 bg-navy/10 rounded-lg flex items-center justify-center group-hover:bg-cyan/20 transition-colors">
+                                <span class="text-xl">🔗</span>
+                            </div>
                             <div>
-                                <h3 class="font-semibold text-gray-800">{{ system.name }}</h3>
-                                <span class="text-xs text-gray-400">{{ system.slug }}</span>
+                                <h3 class="font-semibold text-navy">{{ system.name }}</h3>
+                                <span class="text-xs text-slate-400 font-mono">{{ system.slug }}</span>
                             </div>
                         </div>
                         <div class="flex items-center space-x-1">
                             {% if system.is_active %}
-                            <span class="w-2 h-2 bg-green-500 rounded-full" title="Active"></span>
+                            <span class="w-2 h-2 bg-cyan rounded-full" title="Active"></span>
                             {% else %}
-                            <span class="w-2 h-2 bg-gray-300 rounded-full" title="Inactive"></span>
+                            <span class="w-2 h-2 bg-slate-300 rounded-full" title="Inactive"></span>
                             {% endif %}
                         </div>
                     </div>
-                    <p class="text-sm text-gray-500 line-clamp-2 mb-3">{{ system.description|default:"No description" }}</p>
+                    <p class="text-sm text-slate-500 line-clamp-2 mb-3">{{ system.description|default:"No description" }}</p>
                     
                     <!-- Entry Agent Info -->
-                    <div class="bg-gray-50 rounded-lg p-2 mb-3">
+                    <div class="bg-slate-50 rounded-lg p-3 mb-3 border border-slate-100">
                         <div class="flex items-center space-x-2 text-sm">
-                            <span class="text-gray-400">Entry:</span>
+                            <span class="text-slate-400 text-xs font-medium uppercase tracking-wide">Entry</span>
                             <span class="text-lg">{{ system.entry_agent.icon|default:"🤖" }}</span>
-                            <span class="text-gray-700 font-medium">{{ system.entry_agent.name }}</span>
+                            <span class="text-navy font-medium">{{ system.entry_agent.name }}</span>
                         </div>
                     </div>
                     
                     <!-- Member Count -->
-                    <div class="flex items-center justify-between text-xs text-gray-400">
-                        <span>{{ system.members.count }} agent{{ system.members.count|pluralize }}</span>
+                    <div class="flex items-center justify-between text-xs text-slate-400">
+                        <span class="flex items-center gap-1">
+                            <i class="pi pi-users text-xs"></i>
+                            {{ system.members.count }} agent{{ system.members.count|pluralize }}
+                        </span>
                         <span>Updated {{ system.updated_at|timesince }} ago</span>
                     </div>
                 </div>
-                <div class="border-t border-gray-100 px-4 py-3 bg-gray-50 flex items-center justify-between">
+                <div class="border-t border-slate-100 px-5 py-3 bg-slate-50/50 flex items-center justify-between">
                     <a href="{% url 'agent_studio:system_collaborators' system.id %}"
-                       class="text-gray-500 hover:text-gray-700 text-sm"
+                       class="text-slate-400 hover:text-navy text-sm transition-colors"
                        title="Manage collaborators">
                         <i class="pi pi-users"></i>
                     </a>
                     <a href="{% url 'agent_studio:system_test' system.id %}"
-                       class="text-primary-600 hover:text-primary-700 text-sm font-medium">
+                       class="text-cyan hover:text-cyan-dark text-sm font-medium transition-colors">
                         Test System →
                     </a>
                 </div>
@@ -76,13 +82,16 @@
         </div>
         {% else %}
         <!-- Empty State -->
-        <div class="text-center py-12">
-            <div class="text-6xl mb-4">🔗</div>
-            <h3 class="text-xl font-semibold text-gray-800 mb-2">No systems yet</h3>
-            <p class="text-gray-500 mb-6">Systems are multi-agent configurations that work together.</p>
+        <div class="text-center py-16 bg-white rounded-xl border border-slate-200 border-dashed">
+            <div class="w-16 h-16 bg-navy/10 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                <span class="text-4xl">🔗</span>
+            </div>
+            <h3 class="text-xl font-semibold text-navy mb-2">No systems yet</h3>
+            <p class="text-slate-500 mb-6">Systems are multi-agent configurations that work together.</p>
             <a href="{% url 'agent_studio:system_create' %}"
-               class="inline-block px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium">
-                Create Your First System
+               class="bg-navy hover:bg-navy-light text-white px-6 py-3 rounded-xl inline-flex items-center space-x-2 transition-all hover:shadow-lg font-medium">
+                <i class="pi pi-plus"></i>
+                <span>Create Your First System</span>
             </a>
         </div>
         {% endif %}
@@ -101,4 +110,3 @@ createApp({
 }).use(primevue.config.default).mount('#app');
 </script>
 {% endblock %}
-

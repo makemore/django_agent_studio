@@ -626,8 +626,13 @@ class DynamicAgentRuntime(AgentRuntime):
             return ""
     
     def _build_tool_schemas(self, config: dict) -> list:
-        """Build OpenAI-format tool schemas from config."""
+        """Build OpenAI-format tool schemas from config.
+
+        Includes both regular tools and sub-agent tools.
+        """
         schemas = []
+
+        # Add regular tools
         for tool in config.get("tools", []):
             # Skip the _meta field when building schema
             schema = {
@@ -635,22 +640,68 @@ class DynamicAgentRuntime(AgentRuntime):
                 "function": tool.get("function", {}),
             }
             schemas.append(schema)
+
+        # Add sub-agent tools in OpenAI format
+        for sub_tool in config.get("sub_agent_tools", []):
+            schema = {
+                "type": "function",
+                "function": {
+                    "name": sub_tool.get("name"),
+                    "description": sub_tool.get("description", ""),
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "message": {
+                                "type": "string",
+                                "description": f"The message or task to send to the {sub_tool.get('name')} agent",
+                            },
+                            "context": {
+                                "type": "string",
+                                "description": "Optional additional context to include",
+                            },
+                        },
+                        "required": ["message"],
+                    },
+                },
+            }
+            schemas.append(schema)
+            logger.debug(f"Added sub-agent tool schema: {sub_tool.get('name')}")
+
         return schemas
 
     def _build_tool_map(self, config: dict) -> dict:
-        """Build a map of tool name to execution info."""
+        """Build a map of tool name to execution info.
+
+        Includes both regular tools and sub-agent tools.
+        """
         tool_map = {}
+
+        # Add regular tools
         for tool in config.get("tools", []):
             func_info = tool.get("function", {})
             tool_name = func_info.get("name")
             if tool_name:
                 # Get execution metadata from _meta field
                 meta = tool.get("_meta", {})
+                # Check both function_path (DynamicTool) and builtin_ref (AgentTool)
                 tool_map[tool_name] = {
-                    "function_path": meta.get("function_path"),
+                    "function_path": meta.get("function_path") or meta.get("builtin_ref"),
                     "tool_id": meta.get("tool_id"),
                     "is_dynamic": meta.get("is_dynamic", False),
+                    "is_sub_agent": False,
                 }
+
+        # Add sub-agent tools
+        for sub_tool in config.get("sub_agent_tools", []):
+            tool_name = sub_tool.get("name")
+            if tool_name:
+                tool_map[tool_name] = {
+                    "is_sub_agent": True,
+                    "agent_slug": sub_tool.get("agent_slug"),
+                    "context_mode": sub_tool.get("context_mode", "message_only"),
+                }
+                logger.debug(f"Added sub-agent tool to map: {tool_name} -> {sub_tool.get('agent_slug')}")
+
         return tool_map
 
     async def _execute_tool(
@@ -661,8 +712,22 @@ class DynamicAgentRuntime(AgentRuntime):
         executor: "DynamicToolExecutor",
         ctx: RunContext,
     ) -> str:
-        """Execute a tool and return its result."""
+        """Execute a tool and return its result.
+
+        Handles both regular tools and sub-agent tools.
+        """
         tool_info = tool_map.get(tool_name, {})
+
+        # Check if this is a sub-agent tool
+        if tool_info.get("is_sub_agent"):
+            return await self._execute_sub_agent_tool(
+                tool_name=tool_name,
+                tool_args=tool_args,
+                tool_info=tool_info,
+                ctx=ctx,
+            )
+
+        # Regular tool execution
         function_path = tool_info.get("function_path")
 
         if not function_path:
@@ -689,4 +754,99 @@ class DynamicAgentRuntime(AgentRuntime):
         except Exception as e:
             logger.exception(f"Error executing tool {tool_name}")
             return json.dumps({"error": str(e)})
+
+    async def _execute_sub_agent_tool(
+        self,
+        tool_name: str,
+        tool_args: dict,
+        tool_info: dict,
+        ctx: RunContext,
+    ) -> str:
+        """Execute a sub-agent tool by invoking the sub-agent.
+
+        Args:
+            tool_name: Name of the sub-agent tool
+            tool_args: Arguments passed to the tool (message, context)
+            tool_info: Tool metadata including agent_slug and context_mode
+            ctx: Parent agent's run context
+
+        Returns:
+            JSON string with the sub-agent's response
+        """
+        from agent_runtime_core.multi_agent import (
+            AgentTool as AgentToolCore,
+            InvocationMode,
+            ContextMode,
+            invoke_agent,
+        )
+        from django_agent_runtime.runtime.registry import get_runtime_async
+
+        sub_agent_slug = tool_info.get("agent_slug")
+        context_mode_str = tool_info.get("context_mode", "message_only")
+
+        # Map context_mode string to enum
+        context_mode_map = {
+            'message_only': ContextMode.MESSAGE_ONLY,
+            'summary': ContextMode.SUMMARY,
+            'full': ContextMode.FULL,
+        }
+        context_mode = context_mode_map.get(context_mode_str, ContextMode.MESSAGE_ONLY)
+
+        message = tool_args.get("message", "")
+        additional_context = tool_args.get("context")
+
+        if not message:
+            return json.dumps({"error": "Missing required parameter: message"})
+
+        try:
+            # Get the sub-agent's runtime
+            sub_agent_runtime = await get_runtime_async(sub_agent_slug)
+
+            # Create an AgentTool wrapper for the sub-agent
+            agent_tool = AgentToolCore(
+                agent=sub_agent_runtime,
+                name=tool_name,
+                description=f"Sub-agent: {sub_agent_slug}",
+                invocation_mode=InvocationMode.DELEGATE,
+                context_mode=context_mode,
+                metadata={
+                    'sub_agent_slug': sub_agent_slug,
+                    'parent_run_id': str(ctx.run_id) if ctx.run_id else None,
+                },
+            )
+
+            # Get conversation history from parent context
+            conversation_history = list(ctx.input_messages)
+
+            # Invoke the sub-agent
+            logger.info(f"Invoking sub-agent '{sub_agent_slug}' via tool '{tool_name}'")
+            result = await invoke_agent(
+                agent_tool=agent_tool,
+                message=message,
+                parent_ctx=ctx,
+                conversation_history=conversation_history,
+                additional_context=additional_context,
+            )
+
+            logger.info(f"Sub-agent '{sub_agent_slug}' completed for tool '{tool_name}'")
+
+            return json.dumps({
+                "response": result.response,
+                "sub_agent": result.sub_agent_key,
+                "handoff": result.handoff,
+            })
+
+        except KeyError as e:
+            logger.error(f"Sub-agent not found: {sub_agent_slug} - {e}")
+            return json.dumps({
+                "error": f"Sub-agent not found: {sub_agent_slug}",
+                "tool": tool_name,
+            })
+        except Exception as e:
+            logger.exception(f"Error invoking sub-agent '{sub_agent_slug}'")
+            return json.dumps({
+                "error": str(e),
+                "tool": tool_name,
+                "sub_agent": sub_agent_slug,
+            })
 

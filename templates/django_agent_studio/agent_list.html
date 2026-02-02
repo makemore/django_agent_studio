@@ -1,22 +1,22 @@
 {% extends "django_agent_studio/base.html" %}
 
-{% block title %}My Agents - Agent Studio{% endblock %}
+{% block title %}My Agents - {{ studio_app_name }}{% endblock %}
 
 {% block breadcrumbs %}
 <nav class="flex items-center space-x-2 ml-4 text-sm">
-    <span class="text-gray-400">/</span>
-    <span class="text-gray-600">My Agents</span>
+    <span class="text-white/40">/</span>
+    <span class="text-white/70">My Agents</span>
 </nav>
 {% endblock %}
 
 {% block content %}
-<div class="h-full p-6 overflow-auto">
+<div class="h-full p-6 overflow-auto bg-gradient-to-br from-slate-50 to-slate-100">
     <div class="max-w-6xl mx-auto">
         <!-- Header -->
         <div class="flex items-center justify-between mb-6">
-            <h1 class="text-2xl font-bold text-gray-900">My Agents</h1>
+            <h1 class="text-2xl font-bold text-navy">My Agents</h1>
             <a href="{% url 'agent_studio:agent_create' %}" 
-               class="bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition-colors">
+               class="bg-cyan hover:bg-cyan-dark text-navy px-4 py-2 rounded-xl flex items-center space-x-2 transition-all hover:shadow-lg hover:-translate-y-0.5 font-medium">
                 <i class="pi pi-plus"></i>
                 <span>New Agent</span>
             </a>
@@ -26,51 +26,53 @@
         <!-- Agent Grid -->
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {% for agent in agents %}
-            <div class="bg-white border border-gray-200 rounded-lg overflow-hidden hover:border-primary-300 hover:shadow-md transition-all">
-                <div class="p-4">
+            <div class="bg-white border border-slate-200 rounded-xl overflow-hidden hover:border-cyan hover:shadow-md transition-all group">
+                <div class="p-5">
                     <div class="flex items-center justify-between mb-3">
                         <div class="flex items-center space-x-3">
-                            <span class="text-2xl">{{ agent.icon|default:"🤖" }}</span>
+                            <div class="w-10 h-10 bg-cyan/10 rounded-lg flex items-center justify-center group-hover:bg-cyan/20 transition-colors">
+                                <span class="text-xl">{{ agent.icon|default:"🤖" }}</span>
+                            </div>
                             <div>
-                                <h3 class="font-semibold text-gray-800">{{ agent.name }}</h3>
-                                <span class="text-xs text-gray-400">{{ agent.slug }}</span>
+                                <h3 class="font-semibold text-navy">{{ agent.name }}</h3>
+                                <span class="text-xs text-slate-400 font-mono">{{ agent.slug }}</span>
                             </div>
                         </div>
                         <div class="flex items-center space-x-1">
                             {% if agent.is_active %}
-                            <span class="w-2 h-2 bg-green-500 rounded-full" title="Active"></span>
+                            <span class="w-2 h-2 bg-cyan rounded-full" title="Active"></span>
                             {% else %}
-                            <span class="w-2 h-2 bg-gray-300 rounded-full" title="Inactive"></span>
+                            <span class="w-2 h-2 bg-slate-300 rounded-full" title="Inactive"></span>
                             {% endif %}
                         </div>
                     </div>
-                    <p class="text-sm text-gray-500 line-clamp-2 mb-4">{{ agent.description|default:"No description" }}</p>
-                    <div class="flex items-center justify-between text-xs text-gray-400">
+                    <p class="text-sm text-slate-500 line-clamp-2 mb-4">{{ agent.description|default:"No description" }}</p>
+                    <div class="flex items-center justify-between text-xs text-slate-400">
                         <span>Updated {{ agent.updated_at|timesince }} ago</span>
                         <div class="flex items-center space-x-2">
                             {% if agent.is_public %}
-                            <span class="bg-blue-100 text-blue-700 px-2 py-0.5 rounded">Public</span>
+                            <span class="bg-cyan/10 text-navy px-2 py-0.5 rounded-full font-medium">Public</span>
                             {% endif %}
                             {% if agent.is_template %}
-                            <span class="bg-purple-100 text-purple-700 px-2 py-0.5 rounded">Template</span>
+                            <span class="bg-navy/10 text-navy px-2 py-0.5 rounded-full font-medium">Template</span>
                             {% endif %}
                         </div>
                     </div>
                 </div>
-                <div class="border-t border-gray-100 px-4 py-3 bg-gray-50 flex items-center justify-between">
-                    <div class="flex items-center space-x-3">
+                <div class="border-t border-slate-100 px-5 py-3 bg-slate-50/50 flex items-center justify-between">
+                    <div class="flex items-center space-x-4">
                         <a href="{% url 'agent_studio:agent_edit' agent.id %}"
-                           class="text-primary-600 hover:text-primary-700 text-sm font-medium">
+                           class="text-navy hover:text-cyan text-sm font-medium transition-colors">
                             Edit
                         </a>
                         <a href="{% url 'agent_studio:agent_collaborators' agent.id %}"
-                           class="text-gray-500 hover:text-gray-700 text-sm"
+                           class="text-slate-400 hover:text-navy text-sm transition-colors"
                            title="Manage collaborators">
                             <i class="pi pi-users"></i>
                         </a>
                     </div>
                     <a href="{% url 'agent_studio:agent_test' agent.id %}"
-                       class="text-gray-600 hover:text-gray-700 text-sm">
+                       class="text-cyan hover:text-cyan-dark text-sm font-medium transition-colors">
                         Test →
                     </a>
                 </div>
@@ -79,12 +81,14 @@
         </div>
         {% else %}
         <!-- Empty State -->
-        <div class="text-center py-12">
-            <div class="text-6xl mb-4">🤖</div>
-            <h3 class="text-xl font-semibold text-gray-800 mb-2">No agents yet</h3>
-            <p class="text-gray-500 mb-6">Create your first AI agent to get started</p>
+        <div class="text-center py-16 bg-white rounded-xl border border-slate-200 border-dashed">
+            <div class="w-16 h-16 bg-cyan/10 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                <span class="text-4xl">🤖</span>
+            </div>
+            <h3 class="text-xl font-semibold text-navy mb-2">No agents yet</h3>
+            <p class="text-slate-500 mb-6">Create your first AI agent to get started</p>
             <a href="{% url 'agent_studio:agent_create' %}" 
-               class="bg-primary-600 hover:bg-primary-700 text-white px-6 py-3 rounded-lg inline-flex items-center space-x-2 transition-colors">
+               class="bg-cyan hover:bg-cyan-dark text-navy px-6 py-3 rounded-xl inline-flex items-center space-x-2 transition-all hover:shadow-lg font-medium">
                 <i class="pi pi-plus"></i>
                 <span>Create Your First Agent</span>
             </a>
@@ -105,4 +109,3 @@ createApp({
 }).use(primevue.config.default).mount('#app');
 </script>
 {% endblock %}
-

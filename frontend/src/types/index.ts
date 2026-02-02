@@ -21,7 +21,8 @@ export interface AgentSystem {
   id: string
   name: string
   slug: string
-  entry_agent?: string
+  description?: string
+  entry_agent?: { id: string; name: string; icon?: string } | string
   members?: SystemMember[]
 }
 

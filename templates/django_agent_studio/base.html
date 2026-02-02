@@ -4,7 +4,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}Agent Studio{% endblock %}</title>
+    <meta name="csrf-token" content="{{ csrf_token }}">
+    <title>{% block title %}{{ studio_app_name }}{% endblock %}</title>
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -14,14 +15,45 @@
             theme: {
                 extend: {
                     colors: {
-                        primary: {"50":"#eff6ff","100":"#dbeafe","200":"#bfdbfe","300":"#93c5fd","400":"#60a5fa","500":"#3b82f6","600":"#2563eb","700":"#1d4ed8","800":"#1e40af","900":"#1e3a8a","950":"#172554"}
+                        // Brand Colors (from Django settings)
+                        primary: {
+                            "50": "#e6f7fc",
+                            "100": "#cceff9",
+                            "200": "#99dff3",
+                            "300": "#66cfed",
+                            "400": "{{ studio_colors.accent }}",
+                            "500": "#33b5e7",
+                            "600": "#2691b9",
+                            "700": "#1a6d8b",
+                            "800": "#0d495c",
+                            "900": "{{ studio_colors.primary }}",
+                            "950": "{{ studio_colors.primary_dark }}"
+                        },
+                        navy: {
+                            "DEFAULT": "{{ studio_colors.primary }}",
+                            "light": "{{ studio_colors.primary_light }}",
+                            "dark": "{{ studio_colors.primary_dark }}"
+                        },
+                        cyan: {
+                            "DEFAULT": "{{ studio_colors.accent }}",
+                            "light": "{{ studio_colors.accent_light }}",
+                            "dark": "{{ studio_colors.accent_dark }}"
+                        },
+                        slate: {
+                            "DEFAULT": "{{ studio_colors.secondary }}",
+                            "light": "{{ studio_colors.secondary_light }}",
+                            "dark": "{{ studio_colors.secondary_dark }}"
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
                     }
                 }
             }
         }
     </script>
     
-    <!-- PrimeVue -->
+    <!-- PrimeVue with custom theme overrides -->
     <link rel="stylesheet" href="https://unpkg.com/primevue@3/resources/themes/lara-light-blue/theme.css">
     <link rel="stylesheet" href="https://unpkg.com/primevue@3/resources/primevue.min.css">
     <link rel="stylesheet" href="https://unpkg.com/primeicons/primeicons.css">
@@ -42,44 +74,82 @@
     <script src="https://unpkg.com/primevue@3/tabview/tabview.min.js"></script>
     <script src="https://unpkg.com/primevue@3/tabpanel/tabpanel.min.js"></script>
     
-    <!-- Agent Frontend (for chat widgets)
-         Local development: Files are in django_agent_studio/static/agent-frontend/
-         To update after changes to agent-frontend/dist/:
-           cp agent-frontend/dist/chat-widget.* django_agent_studio/static/agent-frontend/
-         For production, switch to unpkg CDN:
-           https://unpkg.com/@makemore/agent-frontend/dist/chat-widget.css
-           https://unpkg.com/@makemore/agent-frontend/dist/chat-widget.js
-    -->
+    <!-- Agent Frontend -->
     <link rel="stylesheet" href="{% static 'agent-frontend/chat-widget.css' %}">
     <script src="{% static 'agent-frontend/chat-widget.js' %}"></script>
 
-    <!-- Enhanced Markdown Support for Chat Widget -->
-    <!-- Syntax highlighting theme -->
+    <!-- Enhanced Markdown Support -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github-dark.min.css">
-    <!-- Marked.js for markdown parsing -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-    <!-- Highlight.js - use the pre-bundled version with common languages included -->
     <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"></script>
-    <!-- Chat widget markdown addon (must be after chat-widget.js and marked.js) -->
     <script src="{% static 'agent-frontend/chat-widget-markdown.js' %}"></script>
     
     <style>
         [v-cloak] { display: none; }
+        
+        /* ===== Brand Color Variables (from Django settings) ===== */
+        :root {
+            --studio-primary: {{ studio_colors.primary }};
+            --studio-primary-light: {{ studio_colors.primary_light }};
+            --studio-primary-dark: {{ studio_colors.primary_dark }};
+            --studio-accent: {{ studio_colors.accent }};
+            --studio-accent-light: {{ studio_colors.accent_light }};
+            --studio-accent-dark: {{ studio_colors.accent_dark }};
+            --studio-secondary: {{ studio_colors.secondary }};
+            --studio-secondary-light: {{ studio_colors.secondary_light }};
+            --studio-secondary-dark: {{ studio_colors.secondary_dark }};
+        }
+        
+        /* Override PrimeVue primary color */
+        .p-button {
+            background: var(--studio-primary) !important;
+            border-color: var(--studio-primary) !important;
+        }
+        .p-button:hover {
+            background: var(--studio-secondary) !important;
+            border-color: var(--studio-secondary) !important;
+        }
+        .p-button:focus {
+            box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--studio-accent) !important;
+        }
+        .p-button.p-button-success {
+            background: var(--studio-accent) !important;
+            border-color: var(--studio-accent) !important;
+            color: var(--studio-primary) !important;
+        }
+        .p-button.p-button-success:hover {
+            background: var(--studio-accent-dark) !important;
+            border-color: var(--studio-accent-dark) !important;
+        }
+        .p-button.p-button-text {
+            background: transparent !important;
+            color: var(--studio-primary) !important;
+        }
+        .p-button.p-button-text:hover {
+            background: rgba(0, 20, 46, 0.08) !important;
+        }
+        
+        /* Focus rings */
+        .p-dropdown:focus,
+        .p-inputtext:focus {
+            border-color: var(--studio-accent) !important;
+            box-shadow: 0 0 0 1px var(--studio-accent) !important;
+        }
         
         /* Custom scrollbar */
         .custom-scrollbar::-webkit-scrollbar {
             width: 6px;
         }
         .custom-scrollbar::-webkit-scrollbar-track {
-            background: #f1f1f1;
+            background: #f1f5f9;
             border-radius: 3px;
         }
         .custom-scrollbar::-webkit-scrollbar-thumb {
-            background: #c1c1c1;
+            background: #cbd5e1;
             border-radius: 3px;
         }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-            background: #a1a1a1;
+            background: #94a3b8;
         }
         
         /* Override agent-frontend styles for embedded mode */
@@ -109,27 +179,46 @@
             min-height: 0 !important;
             overflow-y: auto !important;
         }
+        
+        /* Logo styling */
+        .studio-logo {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+        .studio-logo svg {
+            height: 28px;
+            width: auto;
+        }
+        
+        /* Custom CSS from settings */
+        {{ studio_custom_css|safe }}
     </style>
     
     {% block extra_head %}{% endblock %}
 </head>
-<body class="h-full bg-gray-50">
+<body class="h-full bg-slate-50">
     <div id="app" v-cloak class="h-full flex flex-col">
         <!-- Header -->
-        <header class="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between">
-            <div class="flex items-center space-x-4">
-                <a href="{% url 'agent_studio:home' %}" class="flex items-center space-x-2">
-                    <span class="text-2xl">🤖</span>
-                    <span class="text-xl font-semibold text-gray-800">Agent Studio</span>
+        <header class="bg-navy text-white px-4 py-3 flex items-center justify-between shadow-lg">
+            <div class="flex items-center space-x-6">
+                <a href="{% url 'agent_studio:home' %}" class="studio-logo">
+                    <!-- Logo from settings -->
+                    {{ studio_logo_svg|safe }}
+                    {% if studio_show_app_name %}
+                    <div class="flex items-center">
+                        <span class="text-lg font-semibold text-white/90">{{ studio_app_name }}</span>
+                    </div>
+                    {% endif %}
                 </a>
                 {% block breadcrumbs %}{% endblock %}
             </div>
             <div class="flex items-center space-x-4">
                 {% if request.user.is_authenticated %}
-                <span class="text-sm text-gray-600">{{ request.user.email|default:request.user }}</span>
+                <span class="text-sm text-white/70">{{ request.user.email|default:request.user }}</span>
                 <form method="post" action="{% url 'agent_studio:logout' %}" class="inline">
                     {% csrf_token %}
-                    <button type="submit" class="text-sm text-gray-500 hover:text-gray-700">Logout</button>
+                    <button type="submit" class="text-sm text-white/60 hover:text-white transition-colors">Logout</button>
                 </form>
                 {% endif %}
             </div>
@@ -147,4 +236,3 @@
     {% block extra_js %}{% endblock %}
 </body>
 </html>
-

@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% if is_new %}Create Agent{% else %}Edit {{ agent.name }}{% endif %} - Agent Studio</title>
+    <title>{% if is_new %}Create Agent{% else %}Edit {{ agent.name }}{% endif %} - {{ studio_app_name }}</title>
 
     <!-- Built Vue app styles (PrimeVue + custom) -->
     <link rel="stylesheet" href="{% static 'django_agent_studio/js/style.css' %}">

@@ -1,15 +1,15 @@
 {% extends "django_agent_studio/base.html" %}
 
-{% block title %}Test {{ system.name }} - Agent Studio{% endblock %}
+{% block title %}Test {{ system.name }} - {{ studio_app_name }}{% endblock %}
 
 {% block breadcrumbs %}
 <nav class="flex items-center space-x-2 ml-4 text-sm">
-    <span class="text-gray-400">/</span>
-    <a href="{% url 'agent_studio:system_list' %}" class="text-gray-500 hover:text-gray-700">My Systems</a>
-    <span class="text-gray-400">/</span>
-    <span class="text-gray-600">{{ system.name }}</span>
-    <span class="text-gray-400">/</span>
-    <span class="text-gray-600">Test</span>
+    <span class="text-white/40">/</span>
+    <a href="{% url 'agent_studio:system_list' %}" class="text-white/60 hover:text-white/90 transition-colors">My Systems</a>
+    <span class="text-white/40">/</span>
+    <span class="text-white/70">{{ system.name }}</span>
+    <span class="text-white/40">/</span>
+    <span class="text-white/70">Test</span>
 </nav>
 {% endblock %}
 
@@ -26,7 +26,7 @@
         height: 100% !important;
         max-height: none !important;
         border-radius: 0 !important;
-        box-shadow: 0 0 20px rgba(0,0,0,0.1) !important;
+        box-shadow: 0 4px 20px rgba(0, 20, 46, 0.1) !important;
     }
 
     #fullscreen-chat-container .cw-toggle-btn {
@@ -49,43 +49,51 @@
         min-height: 0 !important;
         overflow-y: auto !important;
     }
+    
+    #fullscreen-chat-container .cw-header {
+        background: {{ studio_colors.primary }} !important;
+    }
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="h-full flex flex-col">
     <!-- System Info Bar -->
-    <div class="px-4 py-3 bg-white border-b border-gray-200 flex items-center justify-between">
+    <div class="px-5 py-3 bg-white border-b border-slate-200 flex items-center justify-between">
         <div class="flex items-center space-x-4">
-            <span class="text-2xl">🔗</span>
+            <div class="w-10 h-10 bg-navy/10 rounded-lg flex items-center justify-center">
+                <span class="text-xl">🔗</span>
+            </div>
             <div>
-                <h1 class="font-semibold text-gray-800">{{ system.name }}</h1>
-                <p class="text-sm text-gray-500">
-                    Entry: {{ agent.icon|default:"🤖" }} {{ agent.name }}
-                    <span class="text-gray-400 mx-2">•</span>
+                <h1 class="font-semibold text-navy">{{ system.name }}</h1>
+                <p class="text-sm text-slate-500">
+                    <span class="inline-flex items-center gap-1 bg-cyan/10 text-navy px-2 py-0.5 rounded-full text-xs font-medium">
+                        {{ agent.icon|default:"🤖" }} {{ agent.name }}
+                    </span>
+                    <span class="text-slate-300 mx-2">•</span>
                     {{ system.description|default:"No description"|truncatechars:80 }}
                 </p>
             </div>
         </div>
         <div class="flex items-center space-x-3">
             <a href="{% url 'agent_studio:system_collaborators' system.id %}"
-               class="text-gray-600 hover:text-gray-800 px-3 py-1.5 border border-gray-300 rounded-lg text-sm"
+               class="text-slate-500 hover:text-navy px-3 py-1.5 border border-slate-200 rounded-lg text-sm transition-colors hover:border-cyan"
                title="Manage collaborators">
                 <i class="pi pi-users"></i>
             </a>
             <a href="{% url 'agent_studio:system_list' %}"
-               class="text-gray-600 hover:text-gray-800 px-3 py-1.5 border border-gray-300 rounded-lg text-sm">
+               class="text-slate-500 hover:text-navy px-3 py-1.5 border border-slate-200 rounded-lg text-sm transition-colors hover:border-cyan">
                 ← Back to Systems
             </a>
             <button @click="clearChat"
-                    class="text-gray-600 hover:text-gray-800 px-3 py-1.5 border border-gray-300 rounded-lg text-sm">
+                    class="text-white bg-navy hover:bg-navy-light px-4 py-1.5 rounded-lg text-sm font-medium transition-all hover:shadow-md">
                 Clear Chat
             </button>
         </div>
     </div>
     
     <!-- Full Screen Chat -->
-    <div class="flex-1 min-h-0 relative bg-gray-100 flex justify-center">
+    <div class="flex-1 min-h-0 relative bg-gradient-to-br from-slate-50 to-slate-100 flex justify-center">
         <div id="fullscreen-chat-container" class="relative w-full max-w-[800px] h-full"></div>
     </div>
 </div>
@@ -95,7 +103,6 @@
 <script>
 const { createApp } = Vue;
 
-// Use the entry agent's slug for the chat
 const agentSlug = "{{ agent.slug|escapejs }}";
 const backendUrl = window.location.origin;
 
@@ -109,7 +116,7 @@ function initChat() {
         backendUrl: backendUrl,
         agentKey: agentSlug,
         title: '{{ system.name|escapejs }}',
-        primaryColor: '#3b82f6',
+        primaryColor: '{{ studio_chat_primary_color }}',
         showClearButton: true,
         showDebugButton: true,
         showExpandButton: false,
@@ -138,4 +145,3 @@ createApp({
 }).use(primevue.config.default).mount('#app');
 </script>
 {% endblock %}
-

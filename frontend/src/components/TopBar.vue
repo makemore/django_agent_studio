@@ -56,8 +56,6 @@ async function onAgentChange() {
   await loadVersions()
   await loadSpec()
   refreshTestChat()
-  // Don't refresh builder chat - just update its metadata
-  // This preserves the builder conversation when switching agents
   if (window.builderChatWidget?.updateMetadata) {
     window.builderChatWidget.updateMetadata({ agent_id: selectedAgentId.value })
   }
@@ -106,7 +104,7 @@ function handleDeleteAgent() {
           optionValue="value"
           placeholder="Select an agent..."
           @change="onAgentChange"
-          class="w-15rem"
+          class="w-15rem agent-dropdown"
         />
         <Button
           icon="pi pi-plus"
@@ -115,6 +113,7 @@ function handleDeleteAgent() {
           size="small"
           @click="handleCreateAgent"
           v-tooltip.bottom="'Create new agent'"
+          class="new-agent-btn"
         />
         <Button
           v-if="selectedAgentId"
@@ -137,7 +136,7 @@ function handleDeleteAgent() {
             optionLabel="label"
             optionValue="value"
             @change="onVersionChange"
-            class="w-8rem"
+            class="w-8rem version-dropdown"
           />
           <Button
             v-if="selectedVersionId && !isActiveVersion"
@@ -145,6 +144,7 @@ function handleDeleteAgent() {
             size="small"
             text
             @click="activateVersion"
+            class="activate-btn"
           />
         </div>
       </template>
@@ -157,7 +157,7 @@ function handleDeleteAgent() {
           :options="systemOptions"
           optionLabel="label"
           optionValue="value"
-          class="w-10rem"
+          class="w-10rem system-dropdown"
         />
         <Button
           icon="pi pi-cog"
@@ -170,7 +170,7 @@ function handleDeleteAgent() {
     </div>
 
     <div class="topbar-right">
-      <Tag v-if="selectedAgent" :value="selectedAgent.slug" severity="info" />
+      <Tag v-if="selectedAgent" :value="selectedAgent.slug" severity="info" class="agent-tag" />
       <Button
         icon="pi pi-folder"
         label="Specs"
@@ -204,11 +204,11 @@ function handleDeleteAgent() {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0.5rem 1rem;
-  background: var(--surface-0);
-  border-bottom: 1px solid var(--surface-200);
+  padding: 0.625rem 1rem;
+  background: linear-gradient(to right, #f8fafc, #f1f5f9);
+  border-bottom: 1px solid #e2e8f0;
   gap: 1rem;
-  min-height: 52px;
+  min-height: 56px;
 }
 
 .topbar-left, .topbar-right {
@@ -220,27 +220,59 @@ function handleDeleteAgent() {
 .topbar-group {
   display: flex;
   align-items: center;
-  gap: 0.375rem;
+  gap: 0.5rem;
 }
 
 .topbar-divider {
   width: 1px;
-  height: 20px;
-  background: var(--surface-200);
-  margin: 0 0.375rem;
+  height: 24px;
+  background: #cbd5e1;
+  margin: 0 0.5rem;
 }
 
-/* Make dropdowns more compact */
+/* Dropdown styling */
 :deep(.p-dropdown) {
-  border-color: var(--surface-200);
+  border-color: #e2e8f0;
+  background: white;
+  border-radius: 0.5rem;
 }
 
 :deep(.p-dropdown:hover) {
-  border-color: var(--surface-300);
+  border-color: #4fc4f7;
 }
 
 :deep(.p-dropdown .p-dropdown-label) {
-  padding: 0.4rem 0.625rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+}
+
+/* Agent tag */
+.agent-tag {
+  background: rgba(79, 196, 247, 0.15) !important;
+  color: #00142E !important;
+  font-family: 'SF Mono', 'Monaco', monospace;
+  font-size: 0.75rem !important;
+}
+
+/* New agent button - cyan accent */
+.new-agent-btn {
+  background: #4fc4f7 !important;
+  border-color: #4fc4f7 !important;
+  color: #00142E !important;
+}
+
+.new-agent-btn:hover {
+  background: #3db8eb !important;
+  border-color: #3db8eb !important;
+}
+
+/* Activate button */
+.activate-btn {
+  color: #4fc4f7 !important;
+  font-weight: 600 !important;
+}
+
+.activate-btn:hover {
+  background: rgba(79, 196, 247, 0.1) !important;
 }
 </style>
-
