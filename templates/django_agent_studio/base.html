@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token }}">
-    <title>{% block title %}{{ studio_app_name }}{% endblock %}</title>
+    <title>{% block title %}{{ studio_app_name|default:'Agent Studio' }}{% endblock %}</title>
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -15,34 +15,34 @@
             theme: {
                 extend: {
                     colors: {
-                        // Brand Colors (from Django settings)
+                        // Brand Colors (from Django settings with fallbacks)
                         primary: {
                             "50": "#e6f7fc",
                             "100": "#cceff9",
                             "200": "#99dff3",
                             "300": "#66cfed",
-                            "400": "{{ studio_colors.accent }}",
+                            "400": "{{ studio_colors.accent|default:'#4fc4f7' }}",
                             "500": "#33b5e7",
                             "600": "#2691b9",
                             "700": "#1a6d8b",
                             "800": "#0d495c",
-                            "900": "{{ studio_colors.primary }}",
-                            "950": "{{ studio_colors.primary_dark }}"
+                            "900": "{{ studio_colors.primary|default:'#00142E' }}",
+                            "950": "{{ studio_colors.primary_dark|default:'#000d1f' }}"
                         },
                         navy: {
-                            "DEFAULT": "{{ studio_colors.primary }}",
-                            "light": "{{ studio_colors.primary_light }}",
-                            "dark": "{{ studio_colors.primary_dark }}"
+                            "DEFAULT": "{{ studio_colors.primary|default:'#00142E' }}",
+                            "light": "{{ studio_colors.primary_light|default:'#0a2540' }}",
+                            "dark": "{{ studio_colors.primary_dark|default:'#000d1f' }}"
                         },
                         cyan: {
-                            "DEFAULT": "{{ studio_colors.accent }}",
-                            "light": "{{ studio_colors.accent_light }}",
-                            "dark": "{{ studio_colors.accent_dark }}"
+                            "DEFAULT": "{{ studio_colors.accent|default:'#4fc4f7' }}",
+                            "light": "{{ studio_colors.accent_light|default:'#7dd3fc' }}",
+                            "dark": "{{ studio_colors.accent_dark|default:'#3db8eb' }}"
                         },
                         slate: {
-                            "DEFAULT": "{{ studio_colors.secondary }}",
-                            "light": "{{ studio_colors.secondary_light }}",
-                            "dark": "{{ studio_colors.secondary_dark }}"
+                            "DEFAULT": "{{ studio_colors.secondary|default:'#253547' }}",
+                            "light": "{{ studio_colors.secondary_light|default:'#334155' }}",
+                            "dark": "{{ studio_colors.secondary_dark|default:'#1e293b' }}"
                         }
                     },
                     fontFamily: {
@@ -87,17 +87,17 @@
     <style>
         [v-cloak] { display: none; }
         
-        /* ===== Brand Color Variables (from Django settings) ===== */
+        /* ===== Brand Color Variables (from Django settings with fallbacks) ===== */
         :root {
-            --studio-primary: {{ studio_colors.primary }};
-            --studio-primary-light: {{ studio_colors.primary_light }};
-            --studio-primary-dark: {{ studio_colors.primary_dark }};
-            --studio-accent: {{ studio_colors.accent }};
-            --studio-accent-light: {{ studio_colors.accent_light }};
-            --studio-accent-dark: {{ studio_colors.accent_dark }};
-            --studio-secondary: {{ studio_colors.secondary }};
-            --studio-secondary-light: {{ studio_colors.secondary_light }};
-            --studio-secondary-dark: {{ studio_colors.secondary_dark }};
+            --studio-primary: {{ studio_colors.primary|default:'#00142E' }};
+            --studio-primary-light: {{ studio_colors.primary_light|default:'#0a2540' }};
+            --studio-primary-dark: {{ studio_colors.primary_dark|default:'#000d1f' }};
+            --studio-accent: {{ studio_colors.accent|default:'#4fc4f7' }};
+            --studio-accent-light: {{ studio_colors.accent_light|default:'#7dd3fc' }};
+            --studio-accent-dark: {{ studio_colors.accent_dark|default:'#3db8eb' }};
+            --studio-secondary: {{ studio_colors.secondary|default:'#253547' }};
+            --studio-secondary-light: {{ studio_colors.secondary_light|default:'#334155' }};
+            --studio-secondary-dark: {{ studio_colors.secondary_dark|default:'#1e293b' }};
         }
         
         /* Override PrimeVue primary color */
@@ -204,10 +204,10 @@
             <div class="flex items-center space-x-6">
                 <a href="{% url 'agent_studio:home' %}" class="studio-logo">
                     <!-- Logo from settings -->
-                    {{ studio_logo_svg|safe }}
-                    {% if studio_show_app_name %}
+                    {% if studio_logo_svg %}{{ studio_logo_svg|safe }}{% else %}<svg viewBox="0 0 80 32" fill="none" xmlns="http://www.w3.org/2000/svg" class="h-7"><text x="0" y="24" fill="currentColor" font-family="system-ui, -apple-system, sans-serif" font-size="24" font-weight="700">AS</text></svg>{% endif %}
+                    {% if studio_show_app_name|default:True %}
                     <div class="flex items-center">
-                        <span class="text-lg font-semibold text-white/90">{{ studio_app_name }}</span>
+                        <span class="text-lg font-semibold text-white/90">{{ studio_app_name|default:'Agent Studio' }}</span>
                     </div>
                     {% endif %}
                 </a>
